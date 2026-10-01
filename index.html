@@ -286,6 +286,7 @@ function LocalStore(){
     async setAvail(crew,wid,on){S.beschikbaar[crew]=S.beschikbaar[crew]||[];const i=S.beschikbaar[crew].indexOf(wid);if(on&&i<0)S.beschikbaar[crew].push(wid);if(!on&&i>=0)S.beschikbaar[crew].splice(i,1);save();},
     async setSlot(wid,key,crew){S.indeling[wid]=S.indeling[wid]||{};S.indeling[wid][key]=crew;save();},
     async saveWeekend(w){const k=S.weekends.findIndex(x=>x.id===w.id);if(k>=0)S.weekends[k]=w;else S.weekends.push(w);save();},
+    async setSlots(id,slots){const w=S.weekends.find(x=>x.id===id);if(w){w.slots=slots;save();}},
     async deleteWeekend(id){S.weekends=S.weekends.filter(w=>w.id!==id);delete S.indeling[id];Object.values(S.beschikbaar).forEach(a=>{const i=a.indexOf(id);if(i>=0)a.splice(i,1);});save();},
     async addToewijzing(t){S.toewijzingen.push({...t,id:uid()});save();},
     async deleteToewijzing(id){S.toewijzingen=S.toewijzingen.filter(t=>t.id!==id);save();},
@@ -326,6 +327,7 @@ function SupabaseStore(client){
     async setAvail(crew,weekend,on){if(on)await one(client.from('beschikbaarheid').upsert({crew,weekend}));else await one(client.from('beschikbaarheid').delete().match({crew,weekend}));},
     async setSlot(weekend,key,crew){const [rol,plek]=key.split('#');if(crew)await one(client.from('indeling').upsert({weekend,rol,plek:+plek,crew},{onConflict:'weekend,rol,plek'}));else await one(client.from('indeling').delete().match({weekend,rol,plek:+plek}));},
     async saveWeekend(w){await one(client.from('weekends').upsert(w));},
+    async setSlots(id,slots){await one(client.rpc('zet_slots',{p_weekend:id,p_slots:slots}));},
     async deleteWeekend(id){await one(client.from('weekends').delete().eq('id',id));},
     async addToewijzing(t){await one(client.from('toewijzingen').insert(t));},
     async deleteToewijzing(id){await one(client.from('toewijzingen').delete().eq('id',id));},
@@ -509,6 +511,7 @@ function viewAanmeldingen(){
       ${bijeenkomsten(w).length?`<p class="muted">Hoort erbij: ${esc(bijeenkomsten(w).join(' · '))}.</p>`:''}
       <h3 style="margin-top:8px">Beschikbaar</h3>
       <div class="tw"><table><thead><tr><th>Naam</th><th>Gescreende rollen</th><th>Ervaring</th><th>Opmerkingen</th></tr></thead><tbody>${list||'<tr><td colspan="4" class="muted">Nog niemand beschikbaar.</td></tr>'}</tbody></table></div>
+      ${canEdit?`<form class="slotsform row" data-wk="${w.id}"><div class="lab">Plekken per rol</div><div class="help">Hoeveel crew heb je nodig per rol? Formaat: <code>PL:1, GL:1, Spreker:2, Route:3</code>. Rollen: ${M.rollen.join(', ')}.</div><div class="tools"><input type="text" name="slots" value="${esc(slotsStr(w.slots))}" style="flex:1;min-width:260px"><button class="primary small" type="submit">Opslaan</button></div></form>`:''}
       ${rolFilter&&!canEdit?'':`<h3 style="margin-top:16px">${canEdit?'Indeling (jij bent PL)':'Indeling'}</h3><div>${slotsHtml(w,canEdit,rolFilter&&rolFilter.length===1?rolFilter[0]:null)}</div>`}
     </div></section>`;
   }).join('');
@@ -530,8 +533,10 @@ function viewExport(){
     <p class="note" style="margin-top:12px">Geen mail/telefoon, geen opmerkingen, geen afgewezen rollen. Zelfde grid als de 2026-sheet.</p></div></section>`;
 }
 
+function parseSlots(str){const slots={};(str||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(x=>{const [r,n]=x.split(':').map(y=>y.trim());if(M.rollen.includes(r)&&+n>0)slots[r]=+n;else toast(`Onbekende rol of aantal: ${x}`);});return slots;}
+const slotsStr=s=>Object.entries(s||{}).map(([r,n])=>`${r}:${n}`).join(', ');
+
 function viewWeekenden(){
-  const slotsStr=s=>Object.entries(s).map(([r,n])=>`${r}:${n}`).join(', ');
   const form=(w,isNew)=>`<form class="wkform" data-id="${isNew?'':esc(w.id)}">
     <div class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
       <label class="field"><span>Naam</span><input type="text" name="naam" value="${esc(w.naam)}" required></label>
@@ -580,7 +585,7 @@ function viewModel(){
       <dt>weekends</dt><dd>label, naam, datum, startdatum, plekken per rol, startdag, crewmeeting, terugkomavond. Beheer onder Weekenden; de bijeenkomsten staan bij het weekend in de uitvraag. Beschikbaar voor het weekend = ook voor die dagen.</dd>
       <dt>beschikbaarheid</dt><dd>crew × weekend, vrij in te vullen voor gekozen labels.</dd>
       <dt>indeling</dt><dd>weekend × rol × plek → crew, alleen gescreend + beschikbaar (databaseregel).</dd>
-      <dt>toewijzingen</dt><dd>persoon × functie × bereik (weekend / label / rol+label). Bepaalt wie buiten kantoor en bewegingsleiders aanmeldingen ziet: PL/GL/FL van een weekend, coördinatoren van een rol. PL van een weekend mag indelen.</dd>
+      <dt>toewijzingen</dt><dd>persoon × functie × bereik (weekend / label / rol+label). Bepaalt wie buiten kantoor en bewegingsleiders aanmeldingen ziet: PL/GL/FL van een weekend, coördinatoren van een rol. PL van een weekend mag indelen en het aantal plekken per rol van zijn weekend aanpassen.</dd>
     </dl>
     <h3 style="margin-top:18px">Regels</h3>
     <ol>
@@ -639,11 +644,12 @@ document.addEventListener('click',async e=>{
 });
 document.addEventListener('submit',async e=>{
   const f=e.target;e.preventDefault();
-  if(f.classList.contains('wkform')){const fd=new FormData(f);const slots={};(fd.get('slots')||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(x=>{const [r,n]=x.split(':').map(y=>y.trim());if(M.rollen.includes(r)&&+n>0)slots[r]=+n;else toast(`Onbekende rol of aantal: ${x}`);});
+  if(f.classList.contains('wkform')){const fd=new FormData(f);const slots=parseSlots(fd.get('slots'));
     const id=f.dataset.id||(fd.get('id')||'').trim().toLowerCase().replace(/[^a-z0-9-]/g,'-');if(!id){toast('ID ontbreekt');return;}
     if(!f.dataset.id&&wk(id)){toast('ID bestaat al');return;}
     await db.saveWeekend({id,naam:fd.get('naam').trim(),label:fd.get('label'),datum:fd.get('datum').trim(),start_datum:fd.get('start_datum').trim()||null,slots,startdag:fd.get('startdag').trim(),crewmeeting:fd.get('crewmeeting').trim(),terugkomavond:fd.get('terugkomavond').trim()});
     await refresh();toast('Weekend opgeslagen');return;}
+  if(f.classList.contains('slotsform')){const slots=parseSlots(new FormData(f).get('slots'));if(!Object.keys(slots).length){toast('Geen geldige rollen');return;}await db.setSlots(f.dataset.wk,slots);await refresh();toast('Plekken opgeslagen');return;}
   if(f.id==='twForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={user:fd.get('user'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
     await db.addToewijzing(t);await refresh();toast('Toegewezen');return;}
