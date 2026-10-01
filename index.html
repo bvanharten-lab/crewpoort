@@ -159,8 +159,9 @@ tr:last-child td{border-bottom:0}
 @media (max-width:600px){.model dl{grid-template-columns:1fr}}
 .muted{color:var(--muted)}
 .right{text-align:right}
-.login{max-width:420px;margin:40px auto;text-align:center}
-.login input{width:100%;margin-block:8px}
+.login{max-width:560px}
+.login input{width:100%}
+.login .row{border-bottom:0}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--panel2);padding:1px 5px;border-radius:4px}
 .toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
 .toast.show{opacity:1}
@@ -216,7 +217,7 @@ const DEMO = {
   ],
   users:[
     {id:'u_kantoor',naam:'Kantoor (Bart)',rol:'kantoor'},
-    {id:'u_wouter',naam:'Wouter',rol:'leider'},{id:'u_nadine',naam:'Nadine',rol:'leider'},{id:'u_auke',naam:'Auke',rol:'leider'},
+    {id:'u_wouter',naam:'Wouter',rol:'leider',geslacht:'M'},{id:'u_nadine',naam:'Nadine',rol:'leider',geslacht:'V'},{id:'u_auke',naam:'Auke',rol:'leider',geslacht:'M'},
     {id:'c1',naam:'Joris V.',rol:'crew',geslacht:'M'},{id:'c2',naam:'Marijke K.',rol:'crew',geslacht:'V'},{id:'c3',naam:'Ruben D.',rol:'crew',geslacht:'M'},{id:'c4',naam:'Sanne B.',rol:'crew',geslacht:'V'},
     {id:'c5',naam:'Thijs O.',rol:'crew',geslacht:'M'},{id:'c6',naam:'Lotte W.',rol:'crew',geslacht:'V'},{id:'c7',naam:'Daan H.',rol:'crew',geslacht:'M'},{id:'c8',naam:'Femke R.',rol:'crew',geslacht:'V'},
     {id:'c9',naam:'Pieter L.',rol:'crew',geslacht:'M'},{id:'c10',naam:'Anouk M.',rol:'crew',geslacht:'V'},{id:'c11',naam:'Koen S.',rol:'crew',geslacht:'M'},{id:'c12',naam:'Esther J.',rol:'crew',geslacht:'V'},
@@ -337,7 +338,7 @@ let db, M /* stamdata */, D /* data */, me /* huidige gebruiker */, UI={step:nul
 const lbl=id=>M.labels.find(l=>l.id===id);
 const user=id=>M.users.find(u=>u.id===id);
 const wk=id=>D.weekends.find(w=>w.id===id);
-const crewUsers=()=>M.users.filter(u=>u.rol==='crew');
+const crewUsers=()=>M.users.filter(u=>u.rol!=='kantoor'); // crew én leiders (leiders kunnen zelf ook mee)
 const labelsVoor=u=>M.labels.filter(l=>!l.voor||!u.geslacht||l.voor.includes(u.geslacht));
 // bewegingsleider voor (label, geslacht)
 const leiderVoor=(l,geslacht)=>{const L=lbl(l);if(!L)return null;return geslacht==='V'?L.leider_v:geslacht==='M'?L.leider_m:(L.leider_m||L.leider_v);};
@@ -368,6 +369,7 @@ function stepsFor(){
   if(me.rol==='crew'){const s=[['profiel','Mijn gegevens'],['uitvraag','Mijn beschikbaarheid']];if(myToew().length)s.push(['aanmeldingen','Aanmeldingen']);return s;}
   const s=[['goedkeuring','Screening'],['potentieel','Potentieel'],['indeling','Indeling'],['export','Exportsheet']];
   if(me.rol==='kantoor')s.push(['weekenden','Weekenden'],['toewijzingen','Toewijzingen'],['model','Model']);
+  if(me.rol==='leider'&&me.geslacht)s.push(['profiel','Mijn gegevens'],['uitvraag','Mijn beschikbaarheid']);
   return s;
 }
 function renderSteps(){
@@ -454,17 +456,18 @@ function viewProfiel(){
 }
 
 function viewUitvraag(){
-  const c=me.rol==='crew'?me.id:(UI.crewView||crewUsers()[0].id);
+  const self=me.rol==='crew'||me.rol==='leider';
+  const c=self?me.id:(UI.crewView||crewUsers()[0].id);
   const cu=user(c);
   const labels=labelsVoor(cu).filter(l=>intakeOf(c,l.id));
-  const canEdit=me.rol==='crew'||me.rol==='kantoor';
+  const canEdit=self||me.rol==='kantoor';
   const row=w=>{const ok=approvedRoles(c,w.label);const pend=G(c,w.label).filter(g=>g.status==='voorgesteld').length;
     const st=ok.length?`Kiesbaar als ${esc(ok.join(', '))}.`:pend?`Screening loopt.`:'Nog niet gescreend.';
     const extra=bijeenkomsten(w);
     return `<div class="row"><label class="lab"><span class="sw"><input type="checkbox" data-av="${w.id}" data-crew="${c}" ${isAvail(c,w.id)?'checked':''} ${canEdit?'':'disabled'}><i></i></span>${esc(w.naam)} <span class="muted" style="font-weight:400">${esc(w.datum)}</span></label><div class="help">${extra.length?`Hoort erbij: ${esc(extra.join(' · '))}. Beschikbaar voor dit weekend = ook beschikbaar voor deze dagen/avonden. `:''}${st}</div></div>`;};
   const blocks=labels.map(l=>{const ws=D.weekends.filter(w=>w.label===l.id);if(!ws.length)return '';
     return `<div class="band"></div><section class="panel"><h2>${esc(l.naam)}</h2><div class="body">${ws.map(row).join('')}</div></section>`;}).join('');
-  return `${me.rol!=='crew'?`<div class="tools" style="margin-top:16px"><label for="crewSel" class="muted">Bekijk als:</label><select id="crewSel">${crewUsers().map(x=>`<option value="${x.id}" ${x.id===c?'selected':''}>${esc(x.naam)}</option>`).join('')}</select></div>`:''}
+  return `${!self?`<div class="tools" style="margin-top:16px"><label for="crewSel" class="muted">Bekijk als:</label><select id="crewSel">${crewUsers().map(x=>`<option value="${x.id}" ${x.id===c?'selected':''}>${esc(x.naam)}</option>`).join('')}</select></div>`:''}
     <p class="note" style="margin-top:24px">Zet aan waar je kunt. Wijzigingen worden direct bewaard.</p>${blocks||'<div class="band"></div><section class="panel"><h2>Nog geen labels gekozen</h2><div class="body"><p class="muted">Kies eerst onder Mijn gegevens voor welke labels je je wilt inzetten.</p></div></section>'}`;
 }
 
@@ -597,7 +600,7 @@ function brandFor(u){
 }
 function applyBrand(){const b=brandFor(me);const r=document.documentElement;if(b)r.setAttribute('data-brand',b);else r.removeAttribute('data-brand');
   document.getElementById('logo').textContent=b==='4M'?'4M':b==='AR'?'Arise':'C58';
-  document.getElementById('heroTitle').textContent=me.rol==='crew'?'Crew 2027 — jouw inzet':me.rol==='leider'?'Crew 2027 — screening':'Crew 2027 — planning';}
+  document.getElementById('heroTitle').textContent=(UI.step==='profiel'||UI.step==='uitvraag')?'Crew 2027 — jouw inzet':me.rol==='leider'?'Crew 2027 — screening':me.rol==='crew'?'Crew 2027 — jouw inzet':'Crew 2027 — planning';}
 function renderUserbox(){
   const lb=me.rol==='leider'?M.labels.flatMap(l=>[l.leider_m===me.id?l.naam+' (M)':null,l.leider_v===me.id?l.naam+' (V)':null]).filter(Boolean).join(', '):'';
   const tw=me.rol==='crew'&&myToew().length?' · '+[...new Set(myToew().map(t=>t.functie))].join('/'):'';
@@ -605,7 +608,7 @@ function renderUserbox(){
 function renderPager(){const st=stepsFor();const i=st.findIndex(([k])=>k===UI.step);
   document.getElementById('pager').innerHTML=`${i>0?`<button data-step="${st[i-1][0]}">Vorige</button>`:'<span></span>'}<div class="right">${UI.step==='profiel'?'<button class="primary" id="saveAll">Opslaan</button>':''}${i<st.length-1?`<button data-step="${st[i+1][0]}">Volgende</button>`:''}</div>`;}
 async function render(){
-  applyBrand();renderSteps();renderWho();renderUserbox();
+  renderSteps();applyBrand();renderWho();renderUserbox();
   const v={goedkeuring:viewGoedkeuring,potentieel:viewPotentieel,profiel:viewProfiel,uitvraag:viewUitvraag,aanmeldingen:viewAanmeldingen,indeling:viewIndeling,export:viewExport,weekenden:viewWeekenden,toewijzingen:viewToewijzingen,model:viewModel}[UI.step];
   document.getElementById('main').innerHTML=v();
   renderPager();
@@ -665,11 +668,19 @@ async function boot(){
   await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
   sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey);
   const {data:{session}}=await sb.auth.getSession();
-  if(!session){document.getElementById('main').innerHTML=`<div class="panel login"><h2>Inloggen</h2><p class="muted">Je krijgt een inloglink per mail. Alleen adressen die kantoor heeft aangemeld werken.</p><input type="email" id="email" placeholder="je@mail.nl"><button class="primary" id="sendLink">Stuur inloglink</button><p class="muted" id="loginMsg"></p></div>`;
-    document.getElementById('sendLink').onclick=async()=>{const {error}=await sb.auth.signInWithOtp({email:document.getElementById('email').value,options:{emailRedirectTo:location.href.split('#')[0]}});document.getElementById('loginMsg').textContent=error?error.message:'Link verstuurd. Check je mail.';};return;}
+  document.documentElement.setAttribute('data-brand','4M');document.getElementById('logo').textContent='4M';document.getElementById('heroTitle').textContent='Crew 2027 — inloggen';
+  if(!session){document.getElementById('userbox').hidden=true;document.getElementById('main').innerHTML=`<div class="band"></div><section class="panel login"><h2>Inloggen</h2><div class="body">
+      <p class="muted">Je krijgt een inloglink per mail. Gebruik het adres waarop je de uitnodiging kreeg.</p>
+      <div class="row"><label class="lab" for="email">E-mailadres</label><div class="ctl"><input type="email" id="email" placeholder="je@mail.nl" autocomplete="email"></div></div>
+      <div class="tools"><button class="primary" id="sendLink">Stuur inloglink</button><span class="muted" id="loginMsg"></span></div></div></section>`;
+    const send=async()=>{const em=document.getElementById('email').value.trim();if(!em)return;document.getElementById('loginMsg').textContent='Versturen…';
+      const {error}=await sb.auth.signInWithOtp({email:em,options:{emailRedirectTo:location.href.split('#')[0].split('?')[0]}});
+      document.getElementById('loginMsg').textContent=error?'Lukt niet: '+error.message:'Link verstuurd. Check je mail (ook spam).';};
+    document.getElementById('sendLink').onclick=send;document.getElementById('email').addEventListener('keydown',e=>{if(e.key==='Enter')send();});return;}
+  document.getElementById('userbox').hidden=false;
   db=SupabaseStore(sb);M=await db.init();
   me=user(session.user.id);
-  if(!me){document.getElementById('main').innerHTML=`<div class="panel login"><h2>Geen profiel</h2><p class="muted">Je bent ingelogd maar kantoor heeft je nog niet als crew, leider of kantoor aangemeld.</p><button id="logout" class="small">Uitloggen</button></div>`;return;}
+  if(!me){document.getElementById('userbox').hidden=true;document.getElementById('main').innerHTML=`<div class="band"></div><section class="panel login"><h2>Geen profiel</h2><div class="body"><p class="muted">Je bent ingelogd als ${esc(session.user.email)}, maar dit adres staat nog niet in de lijst van kantoor. Vraag kantoor om je toe te voegen en log daarna opnieuw in.</p><div class="tools"><button id="logout">Uitloggen</button></div></div></section>`;return;}
   await refresh();
 }
 boot();
