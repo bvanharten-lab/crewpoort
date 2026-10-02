@@ -8,6 +8,7 @@
 </head>
 <body>
 
+<title>CREW Poort 2027</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Big+Shoulders+Display:wght@600;700;800&family=Epilogue:wght@400;500;600&family=Playfair+Display:wght@600;700&family=Lato:wght@400;700&display=swap">
 <style>
 :root{
@@ -193,6 +194,11 @@ tr:last-child td{border-bottom:0}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--panel2);padding:1px 5px;border-radius:4px}
 .toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
 .toast.show{opacity:1}
+.errbox{display:none;margin:14px 0 0;padding:12px 16px;border:2px solid #c0392b;background:#fdf1ef;color:#7a1f14;font-size:14px;line-height:1.45;border-radius:4px}
+.errbox.show{display:block}
+.errbox b{display:block;margin-bottom:2px}
+.errbox ul{margin:4px 0 0 18px;padding:0}
+.invalid{outline:2px solid #c0392b !important;outline-offset:1px}
 @media (prefers-reduced-motion:reduce){.toast{transition:none}}
 </style>
 
@@ -201,6 +207,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background
 <div class="wrap">
 <div class="userbox" id="userbox"></div>
 <main id="main"></main>
+<div class="errbox" id="err" role="alert"></div>
 <div class="pager" id="pager"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -226,7 +233,21 @@ const fmtRollen=a=>(a||[]).map(fmtRol).join(', ');
 const fmtRolStr=t=>String(t).replace(/\b(PL|GL|FL)\b/g,m=>ROL_NAAM[m]);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const today=()=>new Date().toISOString().slice(0,10);
-let toastT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2000);}
+let toastT;function toast(m,ms=2000){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms);}
+/* Foutmelding die blijft staan tot de volgende actie. items = lijst van redenen. */
+function showErr(titel,items){const b=document.getElementById('err');if(!b)return;const list=(items||[]).filter(Boolean);
+  b.innerHTML=`<b>${esc(titel)}</b>${list.length?`<ul>${list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}`;b.classList.add('show');b.scrollIntoView({block:'nearest',behavior:'smooth'});}
+function clearErr(){const b=document.getElementById('err');if(b){b.classList.remove('show');b.innerHTML='';}document.querySelectorAll('.invalid').forEach(x=>x.classList.remove('invalid'));}
+function mark(el){if(el)el.classList.add('invalid');}
+/* Vertaalt database- en netwerkfouten naar iets wat de gebruiker kan gebruiken. */
+function uitlegFout(e){const m=(e&&(e.message||e.msg||String(e)))||'Onbekende fout';
+  if(/row-level security/i.test(m))return 'Je account heeft geen rechten om dit op te slaan. Meestal betekent dit dat je profiel niet als crew staat ingesteld; vraag kantoor om je rollen te controleren.';
+  if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'Geen verbinding met de server. Controleer je internet en probeer opnieuw.';
+  if(/function .* does not exist/i.test(m))return 'De database mist nog een onderdeel ('+m.replace(/^.*function\s+/i,'').replace(/\s+does not exist.*$/i,'')+'). Kantoor moet het SQL-script nog draaien.';
+  if(/column .* does not exist/i.test(m))return 'De database loopt achter op de app ('+m+'). Kantoor moet het SQL-script nog draaien.';
+  if(/JWT|not authenticated|session/i.test(m))return 'Je bent niet (meer) ingelogd. Vraag een nieuwe inloglink aan.';
+  if(/duplicate key/i.test(m))return 'Dit staat er al in.';
+  return m;}
 
 /* ---------- Demo-stamdata (verzonnen) ---------- */
 const DEMO = {
@@ -339,7 +360,7 @@ function LocalStore(){
 
 function SupabaseStore(client){
   // Verwacht schema uit supabase/schema.sql. Alle autorisatie zit in RLS; de frontend filtert alleen voor de weergave.
-  const one=async q=>{const {data,error}=await q;if(error){toast('Fout: '+error.message);throw error;}return data;};
+  const one=async q=>{const {data,error}=await q;if(error){showErr('Opslaan is niet gelukt',[uitlegFout(error)]);throw error;}return data;};
   return {
     mode:'live',
     async init(){
@@ -496,7 +517,7 @@ function viewPotentieel(){
 function viewAccount(){
   return `<div class="band"></div><section class="panel"><h2>Stap 1: jouw gegevens</h2><div class="body">
     <p class="muted">Ingelogd met ${esc(me.email||'')}. Dit is het adres waarop we je mailen.</p>
-    <form id="welkomForm">
+    <form id="welkomForm" novalidate>
       <div class="row"><label class="lab" for="wNaam">Voor- en achternaam</label><div class="ctl"><input type="text" id="wNaam" name="naam" required value="${esc(me.naam||'')}" style="min-width:280px"></div></div>
       <div class="row"><label class="lab" for="wTel">Telefoonnummer</label><div class="help">Voor de appgroep en bij last-minute vragen.</div><div class="ctl"><input type="text" id="wTel" name="telefoon" required value="${esc(demoTel(me)||'')}" style="min-width:200px"></div></div>
       <div class="row"><div class="lab">Ik ben</div><div class="help">Bepaalt welke bewegingen je ziet: 4M is er voor mannen, Arise voor vrouwen.</div><div class="ctl" style="display:flex;gap:18px"><label><input type="radio" name="geslacht" value="M" ${me.geslacht==='M'?'checked':''} required> Man</label><label><input type="radio" name="geslacht" value="V" ${me.geslacht==='V'?'checked':''}> Vrouw</label></div></div>
@@ -514,7 +535,7 @@ function viewMedisch(){
   const m=medischVan(me.id)||{};
   const yn=(n,v)=>`<label><input type="radio" name="${n}" value="ja" ${v===true?'checked':''}> Ja</label> <label style="margin-left:14px"><input type="radio" name="${n}" value="nee" ${v===false?'checked':''}> Nee</label>`;
   return `<p class="note" style="margin-top:24px">Deze gegevens zijn alleen zichtbaar voor jou en kantoor. Ze gaan nooit mee in lijsten of exports naar anderen. ${m.ingevuld?'We hebben dit al van je; controleer en pas aan waar nodig.':''}</p>
-  <form id="medischForm"><div class="band"></div><section class="panel"><h2>Stap 2: medische gegevens</h2><div class="body">
+  <form id="medischForm" novalidate><div class="band"></div><section class="panel"><h2>Stap 2: medische gegevens</h2><div class="body">
     <div class="row"><div class="lab">Zijn er medische gegevens waar we rekening mee moeten houden?</div><div class="ctl">${yn('medisch',m.medisch)}</div></div>
     <div class="row"><div class="lab">Toelichting medische gegevens</div><div class="help">Bijv. medicijngebruik, aandoeningen, beperkingen.</div><div class="ctl"><textarea name="medisch_toelichting">${esc(m.medisch_toelichting||'')}</textarea></div></div>
     <div class="row"><div class="lab">Heb je voedselallergieën of een dieet?</div><div class="ctl">${yn('allergie',m.allergie)}</div></div>
@@ -537,7 +558,7 @@ function viewCrewbeheer(){
   const pend=(D.pending||[]).map(p=>`<tr><td class="name">${esc(p.naam)}</td><td>${esc(p.geslacht||'–')}</td><td>${(p.rollen||[p.rol]).map(r=>`<span class="tag">${esc(r)}</span>`).join(' ')}</td><td class="muted">wacht op eerste login</td><td><button class="small" data-delpend="${esc(p.email)}">Verwijder</button></td></tr>`).join('');
   return `<div class="band"></div><section class="panel"><h2>Profiel klaarzetten</h2><div class="body">
     <p class="muted">Wie je hier toevoegt, staat bij de eerste login meteen goed (naam, rollen, man/vrouw). Wie je niet toevoegt, kan zichzelf registreren als crew. Meerdere rollen mag: bijv. crew én kantoor.</p>
-    <form id="pendForm" class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end">
+    <form id="pendForm" novalidate class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end">
       <label class="field"><span>E-mailadres</span><input type="email" name="email" required></label>
       <label class="field"><span>Naam</span><input type="text" name="naam" required></label>
       <label class="field"><span>Man/vrouw</span><select name="geslacht"><option value="M">M</option><option value="V">V</option></select></label>
@@ -767,7 +788,7 @@ async function refresh(){D=await db.load();await render();}
 /* ---------- Events ---------- */
 document.addEventListener('click',async e=>{
   const b=e.target.closest('button');if(!b)return;
-  if(b.dataset.step){if(locked(b.dataset.step)){toast('Rond eerst de vorige stap af');return;}UI.step=b.dataset.step;render();return;}
+  if(b.dataset.step){clearErr();if(locked(b.dataset.step)){const f=fase();const why={1:'Stap 1 (jouw gegevens) is nog niet compleet: naam, telefoonnummer en man/vrouw zijn verplicht.',2:'Stap 2 (medische gegevens) is nog niet ingevuld.',3:'Stap 3 (inzet) is nog niet opgeslagen: kies minstens één label en één rol en klik op "Opslaan en verder".'}[f];showErr('Deze stap is nog niet open',[why]);return;}UI.step=b.dataset.step;render();return;}
   if(b.id==='reset'){db.reset();await refresh();toast('Demo teruggezet');return;}
   if(b.id==='logout'){await sb.auth.signOut();location.reload();return;}
   if(b.dataset.ok||b.dataset.no){const [crew,label,rol]=(b.dataset.ok||b.dataset.no).split('|');
@@ -776,10 +797,19 @@ document.addEventListener('click',async e=>{
     await refresh();return;}
   if(b.id==='bulkOk'){const todo=D.goedkeuringen.filter(g=>myLabels().includes(g.label)&&screenDoorMij(g.crew,g.label)&&g.status==='voorgesteld'&&!isPotential(g));for(const g of todo)await db.setStatus(g,'goedgekeurd',me.id);await refresh();toast(`${todo.length} goedgekeurd`);return;}
   if(b.id==='nvAdd'){const cu=user(nvCrew.value);if(!labelsVoor(cu).some(l=>l.id===nvLabel.value)){toast(`${lbl(nvLabel.value).naam} is niet beschikbaar voor dit crewlid`);return;}const ok=await db.addVoorstel({crew:nvCrew.value,label:nvLabel.value,rol:nvRol.value,door:me.id});toast(ok?'Voorstel toegevoegd':'Bestaat al');await refresh();return;}
-  if(b.id==='saveAll'){const box=document.querySelector('.intake');if(!box)return;const val=f=>[...box.querySelectorAll(`[data-f="${f}"]:checked`)].map(x=>x.value);
-    const labels=val('label');if(!labels.length){toast('Kies minstens één label');return;}
-    const erv=box.querySelector('[data-f=ervaring]').value;const payload={ervaring:erv,vervuld:erv==='nieuw'?[]:val('vervuld'),voorkeur:val('voorkeur'),toelichting:box.querySelector('[data-f=toelichting]').value.trim()};
-    for(const l of labelsVoor(me).map(x=>x.id)){if(labels.includes(l))await db.saveIntake({crew:me.id,label:l,...payload});else if(intakeOf(me.id,l))await db.deleteIntake(me.id,l);}
+  if(b.id==='saveAll'){clearErr();const box=document.querySelector('.intake');if(!box)return;const val=f=>[...box.querySelectorAll(`[data-f="${f}"]:checked`)].map(x=>x.value);
+    const fouten=[];
+    if(!isCrew())fouten.push('Je account staat niet als crew ingesteld; alleen crew kan een inzet opgeven. Vraag kantoor om je rollen aan te passen.');
+    if(!me.naam||!me.geslacht||!demoTel(me))fouten.push('Stap 1 (jouw gegevens) is nog niet compleet: naam, telefoonnummer en man/vrouw zijn verplicht.');
+    if(!medischBekend(me.id))fouten.push('Stap 2 (medische gegevens) is nog niet ingevuld.');
+    const labels=val('label');if(!labels.length)fouten.push('Kies minstens één label waarvoor je je wilt inzetten.');
+    const erv=box.querySelector('[data-f=ervaring]').value;const vervuld=erv==='nieuw'?[]:val('vervuld');const voorkeur=val('voorkeur');
+    if(erv!=='nieuw'&&!vervuld.length)fouten.push('Je bent eerder mee geweest: vink onder "Vervuld" aan welke rol(len) je toen had.');
+    if(!voorkeur.length)fouten.push('Vink onder "Wil ik vervullen" minstens één rol aan die je in 2027 zou willen doen.');
+    if(fouten.length){showErr('Nog niet opgeslagen',fouten);return;}
+    const payload={ervaring:erv,vervuld,voorkeur,toelichting:box.querySelector('[data-f=toelichting]').value.trim()};
+    try{for(const l of labelsVoor(me).map(x=>x.id)){if(labels.includes(l))await db.saveIntake({crew:me.id,label:l,...payload});else if(intakeOf(me.id,l))await db.deleteIntake(me.id,l);}}
+    catch(err){return;}
     UI.step='uitvraag';await refresh();toast('Opgeslagen, dit gaat naar de bewegingsleider');return;}
   if(b.id==='submitAll'){const n=D.weekends.filter(w=>isAvail(me.id,w.id)).length;if(!n&&!confirm('Je hebt nog geen weekend aangezet. Toch inleveren?'))return;zetIngeleverd();await render();window.scrollTo({top:0,behavior:'smooth'});toast('Ingeleverd, bedankt!');return;}
   if(b.id==='copyTsv'){try{await navigator.clipboard.writeText(b.dataset.tsv);toast('Gekopieerd, plak in de sheet');}catch(err){toast('Kopiëren geblokkeerd; selecteer de tabel handmatig');}return;}
@@ -789,7 +819,36 @@ document.addEventListener('click',async e=>{
   if(b.dataset.deltw){await db.deleteToewijzing(b.dataset.deltw);await refresh();toast('Toewijzing verwijderd');return;}
 });
 document.addEventListener('submit',async e=>{
-  const f=e.target;e.preventDefault();
+  const f=e.target;e.preventDefault();clearErr();
+  if(f.id==='welkomForm'){const fd=new FormData(f);const naam=(fd.get('naam')||'').trim();const tel=(fd.get('telefoon')||'').trim();const ges=fd.get('geslacht');const fouten=[];
+    if(!naam){fouten.push('Vul je voor- en achternaam in.');mark(f.naam);}else if(!/\s/.test(naam)){fouten.push('Vul zowel je voornaam als je achternaam in.');mark(f.naam);}
+    const cijfers=tel.replace(/\D/g,'');if(!tel){fouten.push('Vul je telefoonnummer in.');mark(f.telefoon);}else if(cijfers.length<10||cijfers.length>13){fouten.push('Het telefoonnummer klopt niet: gebruik 10 cijfers (06-12345678) of een landcode (+31 6 12345678).');mark(f.telefoon);}
+    if(!ges){fouten.push('Kies man of vrouw; dit bepaalt welke bewegingen je ziet.');}
+    if(fouten.length){showErr('Je gegevens zijn nog niet compleet',fouten);return;}
+    try{await db.updateProfile(me.id,{naam,telefoon:tel,geslacht:ges});}catch(err){return;}
+    Object.assign(me,{naam,telefoon:tel,geslacht:ges});const mu=M.users.find(u=>u.id===me.id);if(mu)Object.assign(mu,{naam,telefoon:tel,geslacht:ges});
+    UI.step=medischBekend(me.id)?'profiel':'medisch';await refresh();toast('Gegevens opgeslagen');return;}
+  if(f.id==='medischForm'){const fd=new FormData(f);const g=n=>(fd.get(n)||'').trim();const fouten=[];
+    const med=fd.get('medisch'),all=fd.get('allergie');
+    if(!med)fouten.push('Geef aan of er medische gegevens zijn waar we rekening mee moeten houden (ja of nee).');
+    else if(med==='ja'&&!g('medisch_toelichting')){fouten.push('Je hebt "ja" gekozen bij medische gegevens: licht toe waar we rekening mee moeten houden.');mark(f.medisch_toelichting);}
+    if(!all)fouten.push('Geef aan of je voedselallergieën of een dieet hebt (ja of nee).');
+    else if(all==='ja'&&!g('allergie_toelichting')){fouten.push('Je hebt "ja" gekozen bij voedselallergieën: vul in welke.');mark(f.allergie_toelichting);}
+    if(!g('ice_naam')){fouten.push('Vul de naam in van je contactpersoon in geval van nood.');mark(f.ice_naam);}
+    const iceC=g('ice_telefoon').replace(/\D/g,'');if(!g('ice_telefoon')){fouten.push('Vul het telefoonnummer in van je contactpersoon.');mark(f.ice_telefoon);}else if(iceC.length<10||iceC.length>13){fouten.push('Het telefoonnummer van je contactpersoon klopt niet (10 cijfers of met landcode).');mark(f.ice_telefoon);}
+    if(g('ice_email')&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g('ice_email'))){fouten.push('Het e-mailadres van je contactpersoon klopt niet.');mark(f.ice_email);}
+    if(!g('ice_relatie')){fouten.push('Vul in wat je contactpersoon van je is (partner, ouder, vriend(in)).');mark(f.ice_relatie);}
+    if(fouten.length){showErr('De medische gegevens zijn nog niet compleet',fouten);return;}
+    try{await db.saveMedisch({crew:me.id,medisch:med==='ja',medisch_toelichting:g('medisch_toelichting'),allergie:all==='ja',allergie_toelichting:g('allergie_toelichting'),ice_naam:g('ice_naam'),ice_telefoon:g('ice_telefoon'),ice_email:g('ice_email'),ice_relatie:g('ice_relatie')});}catch(err){return;}
+    UI.step='profiel';await refresh();toast('Medische gegevens opgeslagen');return;}
+  if(f.id==='pendForm'){const fd=new FormData(f);const email=(fd.get('email')||'').trim().toLowerCase();const naam=(fd.get('naam')||'').trim();const rollen=fd.getAll('rollen');const fouten=[];
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){fouten.push('Het e-mailadres klopt niet.');mark(f.email);}
+    if(!naam){fouten.push('Vul een naam in.');mark(f.naam);}
+    if(!rollen.length)fouten.push('Vink minstens één rol aan.');
+    if(M.users.some(u=>(u.email||'').toLowerCase()===email))fouten.push('Dit e-mailadres heeft al een account; pas de rollen aan onder Accounts.');
+    if(fouten.length){showErr('Profiel niet klaargezet',fouten);return;}
+    try{await db.addPending({email,naam,rol:rollen.includes('kantoor')?'kantoor':rollen.includes('leider')?'leider':'crew',rollen,geslacht:fd.get('geslacht')});}catch(err){return;}
+    await refresh();toast('Profiel klaargezet');return;}
   if(f.classList.contains('wkform')){const fd=new FormData(f);const slots=parseSlots(fd.get('slots'));
     const id=f.dataset.id||(fd.get('id')||'').trim().toLowerCase().replace(/[^a-z0-9-]/g,'-');if(!id){toast('ID ontbreekt');return;}
     if(!f.dataset.id&&wk(id)){toast('ID bestaat al');return;}
@@ -840,6 +899,7 @@ async function boot(){
 }
 boot();
 </script>
+
 
 </body>
 </html>
