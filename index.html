@@ -716,9 +716,11 @@ function viewWeekenden(){
     </div>
     <div class="tools">${isNew?`<label class="field" style="margin:0"><span>ID (kort, uniek)</span><input type="text" name="id" placeholder="kw-schotland" required></label>`:''}<button class="primary small" type="submit">${isNew?'Toevoegen':'Opslaan'}</button>${isNew?'':`<button type="button" class="small" data-delwk="${esc(w.id)}">Verwijderen</button>`}</div>
   </form>`;
-  const blocks=[...D.weekends].sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>`<div class="band"></div><section class="panel"><h2>${esc(w.naam)} <span class="tag lbl">${esc(lbl(w.label)?.naam||w.label)}</span>${w.voor&&w.voor.length?` <span class="tag">${fmtVoor(w)}</span>`:''}</h2><div class="body">${form(w,false)}</div></section>`).join('');
-  return `<p class="note" style="margin-top:24px">Wat je hier invult, ziet de vrijwilliger bij het weekend onder Mijn beschikbaarheid: startdag, crewmeeting en terugkomavond horen bij het weekend. Opmerking voor crew komt als LET OP bij het weekend te staan. Plekken per rol bepalen het indelingsgrid. "Crew: voor wie" beperkt wie het weekend ziet en ingedeeld kan worden (bijv. 4Family-weekenden waar alleen mannen crew zijn).</p>${blocks}
-    <div class="band"></div><section class="panel"><h2>Nieuw weekend</h2><div class="body">${form({naam:'',label:M.labels[0].id,datum:'',slots:{}},true)}</div></section>`;
+  const flt=UI.wkLabel&&lbl(UI.wkLabel)?UI.wkLabel:'';
+  const filterBar=`<div class="tools" style="margin-top:16px"><label for="wkLabelSel" class="muted">Label:</label><select id="wkLabelSel"><option value="">Alle labels (${D.weekends.length})</option>${M.labels.map(l=>`<option value="${l.id}" ${flt===l.id?'selected':''}>${esc(l.naam)} (${D.weekends.filter(w=>w.label===l.id).length})</option>`).join('')}</select></div>`;
+  const blocks=[...D.weekends].filter(w=>!flt||w.label===flt).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>`<div class="band"></div><section class="panel"><h2>${esc(w.naam)} <span class="tag lbl">${esc(lbl(w.label)?.naam||w.label)}</span>${w.voor&&w.voor.length?` <span class="tag">${fmtVoor(w)}</span>`:''}</h2><div class="body">${form(w,false)}</div></section>`).join('');
+  return `${filterBar}<p class="note" style="margin-top:12px">Wat je hier invult, ziet de vrijwilliger bij het weekend onder Mijn beschikbaarheid: startdag, crewmeeting en terugkomavond horen bij het weekend. Opmerking voor crew komt als LET OP bij het weekend te staan. Plekken per rol bepalen het indelingsgrid. "Crew: voor wie" beperkt wie het weekend ziet en ingedeeld kan worden (bijv. 4Family-weekenden waar alleen mannen crew zijn).</p>${blocks}
+    <div class="band"></div><section class="panel"><h2>Nieuw weekend</h2><div class="body">${form({naam:'',label:flt||M.labels[0].id,datum:'',slots:{}},true)}</div></section>`;
 }
 
 function viewToewijzingen(){
@@ -889,6 +891,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='crewSel'){UI.crewView=t.value;render();return;}
   if(t.id==='wkSel'){UI.weekendView=t.value;render();return;}
   if(t.id==='amSel'){UI.aanmeldView=t.value;render();return;}
+  if(t.id==='wkLabelSel'){UI.wkLabel=t.value;render();return;}
   if(t.id==='ervSel'){const nieuw=t.value==='nieuw';const tab=document.querySelector('.roltab');tab.classList.toggle('nieuw',nieuw);if(nieuw)tab.querySelectorAll('input[data-f=vervuld]').forEach(x=>x.checked=false);document.getElementById('rolHelp').textContent=nieuw?'Je bent nog niet mee geweest, dus geef alleen aan wat je in 2027 graag zou doen.':'Links: wat je al gedaan hebt. Rechts: wat je in 2027 graag zou doen.';return;}
   if(t.id==='twSoort'){document.querySelectorAll('#twForm [data-for]').forEach(el=>el.hidden=!el.dataset.for.split(' ').includes(t.value));return;}
   if(t.dataset.av){const on=t.checked;try{await db.setAvail(t.dataset.crew,t.dataset.av,on);}catch(err){t.checked=!on;return;}D=await db.load();
