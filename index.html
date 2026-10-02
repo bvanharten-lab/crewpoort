@@ -543,7 +543,7 @@ function viewMedisch(){
   </div></section>
   <div class="band"></div><section class="panel"><h2>In geval van nood (ICE)</h2><div class="body">
     <div class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
-      <label class="field"><span>Naam</span><input type="text" name="ice_naam" value="${esc(m.ice_naam||'')}" required></label>
+      <label class="field"><span>Naam</span><input type="text" name="ice_naam" value="${esc(m.ice_naam||'')}"></label>
       <label class="field"><span>Telefoonnummer</span><input type="text" name="ice_telefoon" value="${esc(m.ice_telefoon||'')}" required></label>
       <label class="field"><span>E-mailadres</span><input type="text" name="ice_email" value="${esc(m.ice_email||'')}"></label>
       <label class="field"><span>Relatie tot jou</span><input type="text" name="ice_relatie" value="${esc(m.ice_relatie||'')}" placeholder="partner, ouder, vriend(in)"></label>
@@ -604,9 +604,9 @@ function viewUitvraag(){
   const labels=labelsVoor(cu).filter(l=>intakeOf(c,l.id));
   const canEdit=self||isKantoor();
   const row=w=>{const ok=approvedRoles(c,w.label);const pend=G(c,w.label).filter(g=>g.status==='voorgesteld').length;
-    const st=ok.length?`Kiesbaar als ${esc(fmtRollen(ok))}.`:pend?`Screening loopt.`:'Nog niet gescreend.';
+    const st=self?'':ok.length?`Kiesbaar als ${esc(fmtRollen(ok))}.`:pend?`Screening loopt.`:'Nog niet gescreend.';
     const extra=bijeenkomsten(w);
-    return `<div class="row"><label class="lab"><span class="sw"><input type="checkbox" data-av="${w.id}" data-crew="${c}" ${isAvail(c,w.id)?'checked':''} ${canEdit?'':'disabled'}><i></i></span>${esc(w.naam)} <span class="muted" style="font-weight:400">${esc(w.datum)}</span></label><div class="help">${extra.length?`Hoort erbij: ${esc(extra.join(', '))}. Beschikbaar voor dit weekend = ook beschikbaar voor deze dagen/avonden. `:''}${st}</div></div>`;};
+    return `<div class="row"><label class="lab"><span class="sw"><input type="checkbox" data-av="${w.id}" data-crew="${c}" ${isAvail(c,w.id)?'checked':''} ${canEdit?'':'disabled'}><i></i></span>${esc(w.naam)} <span class="muted" style="font-weight:400">${esc(w.datum)}</span></label><div class="help">${extra.length?`Hoort erbij: ${esc(extra.join(', '))}. Beschikbaar voor dit weekend = ook beschikbaar voor deze dagen/avonden. `:''}${st}</div></div>`.replace('<div class="help"></div>','');};
   const blocks=labels.map(l=>{const ws=D.weekends.filter(w=>w.label===l.id);if(!ws.length)return '';
     return `<div class="band"></div><section class="panel"><h2>${esc(l.naam)}</h2><div class="body">${ws.map(row).join('')}</div></section>`;}).join('');
   return `${!self?`<div class="tools" style="margin-top:16px"><label for="crewSel" class="muted">Bekijk als:</label><select id="crewSel">${crewUsers().map(x=>`<option value="${x.id}" ${x.id===c?'selected':''}>${esc(x.naam)}</option>`).join('')}</select></div>`:''}
@@ -834,10 +834,8 @@ document.addEventListener('submit',async e=>{
     else if(med==='ja'&&!g('medisch_toelichting')){fouten.push('Je hebt "ja" gekozen bij medische gegevens: licht toe waar we rekening mee moeten houden.');mark(f.medisch_toelichting);}
     if(!all)fouten.push('Geef aan of je voedselallergieën of een dieet hebt (ja of nee).');
     else if(all==='ja'&&!g('allergie_toelichting')){fouten.push('Je hebt "ja" gekozen bij voedselallergieën: vul in welke.');mark(f.allergie_toelichting);}
-    if(!g('ice_naam')){fouten.push('Vul de naam in van je contactpersoon in geval van nood.');mark(f.ice_naam);}
     const iceC=g('ice_telefoon').replace(/\D/g,'');if(!g('ice_telefoon')){fouten.push('Vul het telefoonnummer in van je contactpersoon.');mark(f.ice_telefoon);}else if(iceC.length<10||iceC.length>13){fouten.push('Het telefoonnummer van je contactpersoon klopt niet (10 cijfers of met landcode).');mark(f.ice_telefoon);}
     if(g('ice_email')&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(g('ice_email'))){fouten.push('Het e-mailadres van je contactpersoon klopt niet.');mark(f.ice_email);}
-    if(!g('ice_relatie')){fouten.push('Vul in wat je contactpersoon van je is (partner, ouder, vriend(in)).');mark(f.ice_relatie);}
     if(fouten.length){showErr('De medische gegevens zijn nog niet compleet',fouten);return;}
     try{await db.saveMedisch({crew:me.id,medisch:med==='ja',medisch_toelichting:g('medisch_toelichting'),allergie:all==='ja',allergie_toelichting:g('allergie_toelichting'),ice_naam:g('ice_naam'),ice_telefoon:g('ice_telefoon'),ice_email:g('ice_email'),ice_relatie:g('ice_relatie')});}catch(err){return;}
     UI.step='profiel';await refresh();toast('Medische gegevens opgeslagen');return;}
