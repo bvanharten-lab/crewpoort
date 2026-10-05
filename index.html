@@ -160,6 +160,8 @@ tr:last-child td{border-bottom:0}
 .overnote{background:var(--warn-soft);border-left:4px solid var(--warn);padding:6px 10px;font-size:12px;margin-top:4px}
 .chip.potentieel{background:var(--pot-soft);color:var(--pot);border-color:var(--pot);border-style:dashed}
 .chip.stil{opacity:.7}
+.bar{display:inline-block;width:90px;height:10px;background:var(--panel2);border-radius:5px;overflow:hidden;vertical-align:middle;margin-right:6px}
+.bar i{display:block;height:100%}
 .chip small{font-size:10px;opacity:.8}
 .chip .act{display:inline-flex;gap:2px}
 .chip .act button{padding:0 5px;font-size:12px;line-height:18px;border-radius:0;background:transparent;border-color:currentColor;color:inherit;text-transform:none;letter-spacing:0}
@@ -484,7 +486,7 @@ const fmtVoor=w=>{const v=wkVoor(w);return v.length===2?'mannen en vrouwen':v[0]
 function stepsFor(){
   const s=[];
   if(isCrew()){s.push(['account','1 · Gegevens'],['medisch','2 · Medisch'],['profiel','3 · Inzet'],['uitvraag','4 · Beschikbaarheid']);if(myToew().length)s.push(['aanmeldingen','Aanmeldingen']);}
-  if(isKantoor()||isLeider())s.push(['goedkeuring','Screening'],['potentieel','Potentieel'],['indeling','Indeling'],['export','Exportsheet']);
+  if(isKantoor()||isLeider())s.push(['voortgang','Voortgang'],['goedkeuring','Screening'],['potentieel','Potentieel'],['indeling','Indeling'],['export','Exportsheet']);
   if(isKantoor()||isLeider()||myToew().some(t=>t.functie==='PL'))s.push(['verdeling','Verdeling']);
   if(isKantoor())s.push(['weekenden','Weekenden'],['toewijzingen','Toewijzingen'],['crewbeheer','Crew'],['model','Model']);
   return s;
@@ -539,7 +541,15 @@ function viewGoedkeuring(){
     ${isLeider()?'':add}
     <div class="tw"><table><thead><tr><th>Crewlid</th><th>Intake en beslissingen</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="muted">Nog geen intake of voorstellen.</td></tr>'}</tbody></table></div>
     <p class="note" style="margin-top:12px">Niet zichtbaar hier: mail, telefoon. Afwijs-notities gaan nooit mee naar de exportsheet.</p></div></section>
-    ${ervarenPerFunctie(mine)}`;
+    ${ervarenPerFunctie(mine)}${afgewezenOverzicht(mine)}`;
+}
+/* Overzicht van afgewezen screenings met notitie; terugdraaien zet de rol terug op 'voorgesteld'. */
+function afgewezenOverzicht(mine){
+  const af=mine.filter(g=>g.status==='afgewezen').sort((a,b)=>(b.datum||'').localeCompare(a.datum||'')||user(a.crew).naam.localeCompare(user(b.crew).naam));
+  const rows=af.map(g=>`<tr><td class="name">${esc(user(g.crew)?.naam||g.crew)}</td><td><span class="tag lbl">${esc(lbl(g.label).naam)}</span></td><td>${esc(fmtRol(g.rol))}</td><td>${esc(g.notitie||'')||'<span class="muted">geen notitie</span>'}</td><td class="muted" style="white-space:nowrap">${esc(user(g.door)?.naam||'')}<br>${esc(g.datum||'')}</td><td>${isLeider()||isKantoor()?`<button class="small" data-heropen="${g.crew}|${g.label}|${g.rol}">Terugdraaien</button>`:''}</td></tr>`).join('');
+  return `<div class="band"></div><section class="panel"><h2>Afgewezen</h2><div class="body">
+    <p class="muted">Alle afgewezen rollen binnen jouw labels, met de interne notitie. Alleen zichtbaar voor bewegingsleiders en kantoor; gaat nooit mee in een export. Terugdraaien zet de rol terug op "te beoordelen".</p>
+    <div class="tw"><table><thead><tr><th>Crewlid</th><th>Label</th><th>Rol</th><th>Notitie</th><th>Door / datum</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="muted">Nog niets afgewezen.</td></tr>'}</tbody></table></div></div></section>`;
 }
 /* Informatieve lijst per functie: wie heeft die functie eerder vervuld (automatisch goedgekeurd). Alleen afkeuren mogelijk. */
 function ervarenPerFunctie(mine){
@@ -641,7 +651,7 @@ function viewProfiel(){
     ${gastLabelsVoor(me).map(l=>{const i=intakeOf(c,l.id);const eerder=i?(i.ervaring!=='nieuw'):null;const wil=!!i;const st=G(c,l.id);
       const yn=(f,v)=>`<label><input type="radio" name="gast_${f}_${l.id}" data-g="${f}" data-gl="${l.id}" value="ja" ${v===true?'checked':''}> Ja</label> <label style="margin-left:14px"><input type="radio" name="gast_${f}_${l.id}" data-g="${f}" data-gl="${l.id}" value="nee" ${v===false?'checked':''}> Nee</label>`;
       return `<div class="band"></div><section class="panel gast" data-gl="${l.id}"><h2>${esc(l.naam)}</h2><div class="body">
-        <p class="muted">${esc(l.naam)} organiseert vrouwenweekenden, maar in de facilitaire CREW gaan ook mannen mee. ${eerder===false&&!approvedRoles(c,l.id).length?'Je bent nog niet eerder mee geweest: de bewegingsleider van '+esc(l.naam)+' beoordeelt je aanvraag eerst. Daarna zie je de weekenden bij stap 4.':''}</p>
+        <p class="muted">${esc(l.naam)} organiseert vrouwenweekenden, maar in de facilitaire CREW gaan ook mannen mee. ${eerder===false&&!approvedRoles(c,l.id).length?'Je bent nog niet eerder mee geweest: Team '+esc(l.naam)+' beoordeelt je aanvraag eerst. Daarna zie je de weekenden bij stap 4.':''}</p>
         <div class="row"><div class="lab">Ben je eerder als crew mee geweest met ${esc(l.naam)}?</div><div class="ctl">${yn('eerder',eerder)}</div></div>
         <div class="row"><div class="lab">Wil je in 2027 (weer) mee met ${esc(l.naam)}?</div><div class="ctl">${yn('wil',i?true:(eerder===null?null:false))}</div>${st.length?`<div class="help"><span class="chips">${st.map(g=>chip(g,false)).join('')}</span></div>`:''}</div>
       </div></section>`;}).join('')}
@@ -668,7 +678,7 @@ function viewUitvraag(){
     const st=self||zonderRollen(w.label)?'':`<span class="avst">${ok.length?`Kiesbaar als ${esc(fmtRollen(ok))}.`:pend?`Screening loopt.`:'Nog niet gescreend.'}</span>`;
     const extra=bijeenkomsten(w);
     return `<div class="row"><label class="lab"><span class="sw"><input type="checkbox" data-av="${w.id}" data-crew="${c}" ${isAvail(c,w.id)?'checked':''} ${canEdit?'':'disabled'}><i></i></span>${esc(w.naam)} <span class="muted" style="font-weight:400">${esc(w.datum)}</span></label><div class="help" data-avhelp="${w.id}">${isAvail(c,w.id)?letOp(w):''}${st}</div></div>`;};
-  const blocks=labels.map(l=>{if(isGast(l,cu)&&!gastToegang(c,l.id))return `<div class="band"></div><section class="panel"><h2>${esc(l.naam)}</h2><div class="body"><p class="muted">Je aanvraag om als crew mee te gaan met ${esc(l.naam)} ligt bij de bewegingsleider. Zodra die akkoord is, kun je hier je beschikbaarheid aangeven.</p></div></section>`;const ws=D.weekends.filter(w=>w.label===l.id&&wkPastBij(w,cu));if(!ws.length)return '';
+  const blocks=labels.map(l=>{if(isGast(l,cu)&&!gastToegang(c,l.id))return `<div class="band"></div><section class="panel"><h2>${esc(l.naam)}</h2><div class="body"><p class="muted">Je aanvraag om als crew mee te gaan met ${esc(l.naam)} ligt bij Team ${esc(l.naam)}. Zodra zij akkoord zijn, kun je hier je beschikbaarheid aangeven.</p></div></section>`;const ws=D.weekends.filter(w=>w.label===l.id&&wkPastBij(w,cu));if(!ws.length)return '';
     return `<div class="band"></div><section class="panel"><h2>${esc(l.naam)}</h2><div class="body">${ws.map(row).join('')}</div></section>`;}).join('');
   return `${!self?`<div class="tools" style="margin-top:16px"><label for="crewSel" class="muted">Bekijk als:</label><select id="crewSel">${crewUsers().map(x=>`<option value="${x.id}" ${x.id===c?'selected':''}>${esc(x.naam)}</option>`).join('')}</select></div>`:''}
     ${self&&ingeleverd()?`<div class="band"></div><section class="panel"><h2>Bedankt, je opgave is binnen</h2><div class="body">${(()=>{const av=D.weekends.filter(w=>isAvail(c,w.id)&&wkPastBij(w,cu)).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||''));return `<p>Je staat beschikbaar voor <b>${av.length}</b> weekend(en) bij ${esc(labels.map(l=>l.naam).join(', ')||'nog geen label')}:</p>${av.length?`<ul style="margin:6px 0 14px 18px;padding:0">${av.map(w=>`<li><b>${esc(w.naam)}</b> <span class="muted">${esc(w.datum)} · ${esc(lbl(w.label).naam)}</span></li>`).join('')}</ul>`:''}<p>De bewegingsleider screent je rollen; daarna kan de projectleider je indelen. Je hoort van ons.</p>`;})()}<p class="muted">Verandert er iets? Pas het hieronder aan en klik opnieuw op inleveren.</p></div></section>`:''}<p class="note" style="margin-top:24px"><b>Stap 4: beschikbaarheid.</b> Zet aan waar je kunt en klik onderaan op <b>Opslaan en inleveren</b>, uiterlijk <b>${DEADLINE}</b>. Zodra je een weekend aanzet, zie je de bijbehorende dagen en bijzonderheden.</p>${blocks||'<div class="band"></div><section class="panel"><h2>Nog geen labels gekozen</h2><div class="body"><p class="muted">Kies eerst onder Mijn gegevens voor welke labels je je wilt inzetten.</p></div></section>'}`;
@@ -805,6 +815,40 @@ function viewToewijzingen(){
   </div></section>`;
 }
 
+/* Voortgang per weekend voor bewegingsleiders en kantoor: beschikbaar, kiesbaar, ingedeeld/plekken, open screenings. */
+function voortgangData(){
+  const labels=myLabels();
+  return D.weekends.filter(w=>labels.includes(w.label)).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>{
+    const crew=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id));
+    const kies=zonderRollen(w.label)?crew:crew.filter(c=>approvedRoles(c.id,w.label).length);
+    const open=zonderRollen(w.label)?0:new Set(crew.filter(c=>G(c.id,w.label).some(g=>g.status==='voorgesteld')).map(c=>c.id)).size;
+    const plekken=zonderRollen(w.label)?0:Object.values(w.slots||{}).reduce((a,b)=>a+b,0);
+    const ingedeeld=Object.values(D.indeling[w.id]||{}).filter(Boolean).length;
+    const pl=D.toewijzingen.filter(t=>t.soort==='weekend'&&t.weekend===w.id&&t.functie==='PL').map(t=>user(t.user)?.naam).filter(Boolean);
+    return {w,beschikbaar:crew.length,kiesbaar:kies.length,open,plekken,ingedeeld,pl};
+  });
+}
+function viewVoortgang(){
+  const rows=voortgangData();
+  const bar=(n,t)=>{const p=t?Math.min(100,Math.round(n/t*100)):0;return `<div class="bar"><i style="width:${p}%;background:${p>=100?'var(--ok)':p>=50?'var(--warn)':'var(--accent)'}"></i></div><span class="muted" style="font-size:12px">${n}/${t}</span>`;};
+  const tot={besch:0,open:0,ingedeeld:0,plekken:0};rows.forEach(r=>{tot.open+=r.open;tot.ingedeeld+=r.ingedeeld;tot.plekken+=r.plekken;});
+  const crewMet=new Set(rows.flatMap(r=>crewUsers().filter(c=>wkPastBij(r.w,c)&&isAvail(c.id,r.w.id)).map(c=>c.id))).size;
+  const klaar=rows.filter(r=>r.plekken&&r.ingedeeld>=r.plekken).length;
+  const scope=isLeider()?M.labels.flatMap(l=>[l.leider_m===me.id?l.naam+' (mannen)':null,l.leider_v===me.id?l.naam+' (vrouwen)':null]).filter(Boolean).join(', '):'alle labels';
+  return `<div class="band"></div><section class="panel"><h2>Voortgang</h2><div class="body">
+    <p class="muted">Per weekend binnen ${esc(scope)}: hoeveel crew beschikbaar is, hoeveel daarvan kiesbaar is voor de PL, hoe ver de indeling is en hoeveel screenings nog open staan. Deadline invullen: ${DEADLINE}.</p>
+    <div class="stats">
+      <div class="stat"><div class="v">${crewMet}</div><div class="l">crewleden beschikbaar gesteld</div></div>
+      <div class="stat"><div class="v ${tot.open?'over':''}">${tot.open}</div><div class="l">crewleden wachten op screening</div></div>
+      <div class="stat"><div class="v">${tot.ingedeeld}/${tot.plekken}</div><div class="l">plekken ingedeeld</div></div>
+      <div class="stat"><div class="v">${klaar}/${rows.filter(r=>r.plekken).length}</div><div class="l">weekenden volledig ingedeeld</div></div>
+    </div>
+    <div class="tw"><table><thead><tr><th>Weekend</th><th>PL</th><th class="right">Beschikbaar</th><th class="right">Kiesbaar</th><th>Ingedeeld</th><th class="right">Open screening</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td class="name">${esc(r.w.naam)}<div class="muted" style="font-weight:400;font-size:12px">${esc(lbl(r.w.label).naam)} · ${esc(r.w.datum)}</div></td><td>${r.pl.length?esc(r.pl.join(', ')):'<span class="muted">nog geen PL</span>'}</td><td class="right">${r.beschikbaar}</td><td class="right">${zonderRollen(r.w.label)?'<span class="muted">n.v.t.</span>':r.kiesbaar}</td><td style="min-width:140px">${zonderRollen(r.w.label)?'<span class="muted">geen indeling</span>':bar(r.ingedeeld,r.plekken)}</td><td class="right ${r.open?'over':''}">${zonderRollen(r.w.label)?'':r.open}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">Geen weekenden.</td></tr>'}
+    </tbody></table></div>
+    <p class="note" style="margin-top:12px">Open screening = crewleden die beschikbaar zijn voor dit weekend en nog een rol hebben die op jouw beoordeling wacht. Zolang dat getal niet 0 is, mist de PL mogelijk kandidaten.</p>
+  </div></section>`;
+}
 function viewVerdeling(){
   const V=D.verdeling||crewUsers().map(c=>({id:c.id,naam:c.naam,n:timesChosen(c.id),waar:chosenDetail(c.id),beschikbaar:D.weekends.filter(w=>isAvail(c.id,w.id)).map(w=>({naam:w.naam,label:w.label,rollen:approvedRoles(c.id,w.label)}))}));
   const metBesch=V.filter(v=>v.beschikbaar.length);
@@ -866,7 +910,7 @@ function renderPager(){const st=stepsFor();const i=st.findIndex(([k])=>k===UI.st
   const nxt=st[i+1];document.getElementById('pager').innerHTML=`${i>0?`<button data-step="${st[i-1][0]}">Vorige</button>`:'<span></span>'}<div class="right">${UI.step==='profiel'?'<button class="primary" id="saveAll">Opslaan en verder</button>':''}${UI.step==='uitvraag'&&isCrew()&&!UI.crewView?`<button class="primary" id="submitAll">${ingeleverd()?'Opnieuw inleveren':'Opslaan en inleveren'}</button>`:''}${nxt&&!locked(nxt[0])?`<button data-step="${nxt[0]}">Volgende</button>`:''}</div>`;}
 async function render(){
   renderSteps();applyBrand();renderWho();renderUserbox();
-  const v={account:viewAccount,medisch:viewMedisch,verdeling:viewVerdeling,crewbeheer:viewCrewbeheer,goedkeuring:viewGoedkeuring,potentieel:viewPotentieel,profiel:viewProfiel,uitvraag:viewUitvraag,aanmeldingen:viewAanmeldingen,indeling:viewIndeling,export:viewExport,weekenden:viewWeekenden,toewijzingen:viewToewijzingen,model:viewModel}[UI.step];
+  const v={account:viewAccount,medisch:viewMedisch,voortgang:viewVoortgang,verdeling:viewVerdeling,crewbeheer:viewCrewbeheer,goedkeuring:viewGoedkeuring,potentieel:viewPotentieel,profiel:viewProfiel,uitvraag:viewUitvraag,aanmeldingen:viewAanmeldingen,indeling:viewIndeling,export:viewExport,weekenden:viewWeekenden,toewijzingen:viewToewijzingen,model:viewModel}[UI.step];
   document.getElementById('main').innerHTML=v();
   renderPager();
   if(UI.lastStep!==UI.step){UI.lastStep=UI.step;window.scrollTo({top:0,left:0,behavior:'auto'});}
@@ -905,6 +949,7 @@ document.addEventListener('click',async e=>{
     catch(err){return;}
     UI.step='uitvraag';await refresh();toast(labels.every(l=>zonderRollen(l))?'Opgeslagen':'Opgeslagen, dit gaat naar de bewegingsleider');return;}
   if(b.id==='submitAll'){const n=D.weekends.filter(w=>isAvail(me.id,w.id)).length;if(!n&&!confirm('Je hebt nog geen weekend aangezet. Toch inleveren?'))return;zetIngeleverd();await render();window.scrollTo({top:0,behavior:'smooth'});toast('Ingeleverd, bedankt!');return;}
+  if(b.dataset.heropen){clearErr();const [crew,label,rol]=b.dataset.heropen.split('|');try{await db.setStatus({crew,label,rol},'voorgesteld',me.id,'');}catch(err){return;}await refresh();toast('Teruggezet op te beoordelen');return;}
   if(b.dataset.exportsheet){clearErr();const w=wk(b.dataset.exportsheet);if(!w)return;
     if(!w.sheet_url){showErr('Export niet mogelijk',['Bij dit weekend staat nog geen link naar de productiesheet. Kantoor vult die in onder Weekenden.']);return;}
     if(db.mode==='demo'){toast('In de demo wordt niets naar Google Sheets geschreven');return;}
