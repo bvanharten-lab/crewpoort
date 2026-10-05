@@ -392,7 +392,7 @@ function SupabaseStore(client){
         one(client.from('goedkeuringen').select('crew,label,rol,status,bron,door,datum,notitie')),
         one(client.from('beschikbaarheid').select('crew,weekend')),
         one(client.from('indeling').select('weekend,rol,plek,crew')),
-        one(client.from('weekends').select('id,label,naam,datum,start_datum,slots,startdag,terugkomavond,crewmeeting,voor,opmerking').order('start_datum')),
+        one(client.from('weekends').select('id,label,naam,datum,start_datum,slots,startdag,terugkomavond,crewmeeting,voor,opmerking,sheet_url').order('start_datum')),
         one(client.from('toewijzingen').select('id,user,functie,soort,weekend,label,rol')),
         one(client.from('medisch').select('crew,medisch,medisch_toelichting,allergie,allergie_toelichting,ice_naam,ice_telefoon,ice_relatie,ingevuld')),
         client.from('profiles_pending').select('email,naam,rol,rollen,geslacht').then(r=>r.data||[]),
@@ -674,6 +674,12 @@ function viewUitvraag(){
     ${self&&ingeleverd()?`<div class="band"></div><section class="panel"><h2>Bedankt, je opgave is binnen</h2><div class="body">${(()=>{const av=D.weekends.filter(w=>isAvail(c,w.id)&&wkPastBij(w,cu)).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||''));return `<p>Je staat beschikbaar voor <b>${av.length}</b> weekend(en) bij ${esc(labels.map(l=>l.naam).join(', ')||'nog geen label')}:</p>${av.length?`<ul style="margin:6px 0 14px 18px;padding:0">${av.map(w=>`<li><b>${esc(w.naam)}</b> <span class="muted">${esc(w.datum)} · ${esc(lbl(w.label).naam)}</span></li>`).join('')}</ul>`:''}<p>De bewegingsleider screent je rollen; daarna kan de projectleider je indelen. Je hoort van ons.</p>`;})()}<p class="muted">Verandert er iets? Pas het hieronder aan en klik opnieuw op inleveren.</p></div></section>`:''}<p class="note" style="margin-top:24px"><b>Stap 4: beschikbaarheid.</b> Zet aan waar je kunt en klik onderaan op <b>Opslaan en inleveren</b>, uiterlijk <b>${DEADLINE}</b>. Zodra je een weekend aanzet, zie je de bijbehorende dagen en bijzonderheden.</p>${blocks||'<div class="band"></div><section class="panel"><h2>Nog geen labels gekozen</h2><div class="body"><p class="muted">Kies eerst onder Mijn gegevens voor welke labels je je wilt inzetten.</p></div></section>'}`;
 }
 
+/* Knop: indeling naar het tabblad CREW + ICE van de productiesheet (Edge Function export-sheet). */
+function exportKnop(w){
+  if(zonderRollen(w.label))return '';
+  const n=Object.values(D.indeling[w.id]||{}).filter(Boolean).length;
+  return `<div class="tools" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)"><button class="primary small" data-exportsheet="${w.id}" ${n?'':'disabled title="Nog niemand ingedeeld"'}>Exporteer naar productiesheet</button><span class="muted" style="font-size:13px">${w.sheet_url?`Schrijft de ${n} ingedeelde crewleden (naam, telefoon, ICE) naar tabblad CREW + ICE; bestaande inhoud vanaf rij 3 wordt overschreven.`:'Nog geen productiesheet gekoppeld; kantoor vult de link in onder Weekenden.'}</span></div>`;
+}
 /* Lijst met beschikbare crew voor een weekend zonder rollen (Promo). */
 function beschikbaarLijst(w){
   const av=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)).sort((a,b)=>a.naam.localeCompare(b.naam));
@@ -706,7 +712,7 @@ function viewIndeling(){
   const toew=D.toewijzingen.filter(t=>t.soort==='weekend'&&t.weekend===w.id).map(t=>`${user(t.user)?.naam} (${t.functie})`);
   return `<div class="band"></div><section class="panel"><h2>Indeling</h2><div class="body">
     <div class="tools"><select id="wkSel">${wks.map(x=>`<option value="${x.id}" ${x.id===w.id?'selected':''}>${esc(lbl(x.label).naam)} · ${esc(x.naam)} (${esc(x.datum)})</option>`).join('')}</select>${zonderRollen(w.label)?'':`<span class="muted">${Object.values(ind).filter(Boolean).length}/${n} gevuld</span>`}</div>
-    <p class="muted">${letOp(w)}${toew.length?'Leiding: '+esc(toew.join(', '))+'. ':''}Voor ${fmtVoor(w)}. ${zonderRollen(w.label)?'':'Links de rol, dan hoeveel je nodig hebt, dan per plek de beschikbare en gescreende crew.'}</p>${zonderRollen(w.label)?beschikbaarLijst(w):`<div>${slotsHtml(w,true,null,isKantoor())}</div>`}</div></section>`;
+    <p class="muted">${letOp(w)}${toew.length?'Leiding: '+esc(toew.join(', '))+'. ':''}Voor ${fmtVoor(w)}. ${zonderRollen(w.label)?'':'Links de rol, dan hoeveel je nodig hebt, dan per plek de beschikbare en gescreende crew.'}</p>${zonderRollen(w.label)?beschikbaarLijst(w):`<div>${slotsHtml(w,true,null,isKantoor())}</div>${exportKnop(w)}`}</div></section>`;
 }
 
 function viewAanmeldingen(){
@@ -727,7 +733,7 @@ function viewAanmeldingen(){
       ${letOp(w)?`<p class="muted">${letOp(w)}</p>`:''}
       ${zonderRollen(w.label)?beschikbaarLijst(w):`<h3 style="margin-top:8px">Beschikbaar</h3>
       <div class="tw"><table><thead><tr><th>Naam</th><th>Gescreende rollen</th><th>Ervaring</th><th>Opmerkingen</th></tr></thead><tbody>${list||'<tr><td colspan="4" class="muted">Nog niemand beschikbaar.</td></tr>'}</tbody></table></div>`}
-      ${zonderRollen(w.label)||(rolFilter&&!canEdit)?'':`<h3 style="margin-top:16px">${canEdit?'Indeling (jij bent PL): kies per rol hoeveel je nodig hebt en wie':'Indeling'}</h3><div>${slotsHtml(w,canEdit,rolFilter&&rolFilter.length===1?rolFilter[0]:null,canEdit)}</div>`}
+      ${zonderRollen(w.label)||(rolFilter&&!canEdit)?'':`<h3 style="margin-top:16px">${canEdit?'Indeling (jij bent PL): kies per rol hoeveel je nodig hebt en wie':'Indeling'}</h3><div>${slotsHtml(w,canEdit,rolFilter&&rolFilter.length===1?rolFilter[0]:null,canEdit)}</div>${canEdit?exportKnop(w):''}`}
     </div></section>`;
   }).join('');
 }
@@ -767,6 +773,7 @@ function viewWeekenden(){
       <label class="field"><span>Startdag</span><input type="text" name="startdag" value="${esc(w.startdag||'')}" placeholder="Startdag 20 maart 2027"></label>
       <label class="field"><span>Crewmeeting</span><input type="text" name="crewmeeting" value="${esc(w.crewmeeting||'')}" placeholder="Online crewavond 6 april 2027"></label>
       <label class="field"><span>Terugkomavond</span><input type="text" name="terugkomavond" value="${esc(w.terugkomavond||'')}" placeholder="Terugkomavond 20 mei 2027"></label>
+      <label class="field" style="grid-column:1/-1"><span>Productiesheet (Google Sheets-link, voor de export naar CREW + ICE)</span><input type="text" name="sheet_url" value="${esc(w.sheet_url||'')}" placeholder="https://docs.google.com/spreadsheets/d/…"></label>
       <label class="field" style="grid-column:1/-1"><span>Opmerking voor crew (LET OP)</span><input type="text" name="opmerking" value="${esc(w.opmerking||'')}" placeholder="Crew start al op donderdag; goede conditie nodig"></label>
       <label class="field" style="grid-column:1/-1"><span>Plekken per rol</span><input type="text" name="slots" value="${esc(slotsStr(w.slots||{}))}" placeholder="PL:1, GL:1, Spreker:2, Route:3"></label>
     </div>
@@ -898,6 +905,17 @@ document.addEventListener('click',async e=>{
     catch(err){return;}
     UI.step='uitvraag';await refresh();toast(labels.every(l=>zonderRollen(l))?'Opgeslagen':'Opgeslagen, dit gaat naar de bewegingsleider');return;}
   if(b.id==='submitAll'){const n=D.weekends.filter(w=>isAvail(me.id,w.id)).length;if(!n&&!confirm('Je hebt nog geen weekend aangezet. Toch inleveren?'))return;zetIngeleverd();await render();window.scrollTo({top:0,behavior:'smooth'});toast('Ingeleverd, bedankt!');return;}
+  if(b.dataset.exportsheet){clearErr();const w=wk(b.dataset.exportsheet);if(!w)return;
+    if(!w.sheet_url){showErr('Export niet mogelijk',['Bij dit weekend staat nog geen link naar de productiesheet. Kantoor vult die in onder Weekenden.']);return;}
+    if(db.mode==='demo'){toast('In de demo wordt niets naar Google Sheets geschreven');return;}
+    if(!confirm(`Indeling van ${w.naam} naar tabblad CREW + ICE schrijven? Alles vanaf rij 3 wordt overschreven.`))return;
+    b.disabled=true;b.textContent='Bezig…';
+    try{const {data,error}=await sb.functions.invoke('export-sheet',{body:{weekend:w.id}});
+      let res=data;if(error){try{res=await error.context.json();}catch(e){res={error:error.message};}}
+      if(!res||res.error){showErr('Export mislukt',[res?.error||'Onbekende fout']);}
+      else{toast(`${res.aantal} crewleden naar de productiesheet geschreven`,4000);if(res.url)window.open(res.url,'_blank');}
+    }catch(err){showErr('Export mislukt',[uitlegFout(err)]);}
+    b.disabled=false;b.textContent='Exporteer naar productiesheet';return;}
   if(b.id==='copyTsv'){try{await navigator.clipboard.writeText(b.dataset.tsv);toast('Gekopieerd, plak in de sheet');}catch(err){toast('Kopiëren geblokkeerd; selecteer de tabel handmatig');}return;}
   if(b.dataset.delwk){if(!confirm('Weekend verwijderen? Beschikbaarheid en indeling van dit weekend gaan mee.'))return;await db.deleteWeekend(b.dataset.delwk);await refresh();toast('Weekend verwijderd');return;}
   if(b.dataset.delpend){await db.deletePending(b.dataset.delpend);await refresh();return;}
@@ -935,7 +953,7 @@ document.addEventListener('submit',async e=>{
   if(f.classList.contains('wkform')){const fd=new FormData(f);const slots=parseSlots(fd.get('slots'));
     const id=f.dataset.id||(fd.get('id')||'').trim().toLowerCase().replace(/[^a-z0-9-]/g,'-');if(!id){toast('ID ontbreekt');return;}
     if(!f.dataset.id&&wk(id)){toast('ID bestaat al');return;}
-    const voorV=fd.get('voor')||'';await db.saveWeekend({id,naam:fd.get('naam').trim(),label:fd.get('label'),voor:voorV?voorV.split(''):null,datum:fd.get('datum').trim(),start_datum:fd.get('start_datum').trim()||null,slots,startdag:fd.get('startdag').trim(),crewmeeting:fd.get('crewmeeting').trim(),terugkomavond:fd.get('terugkomavond').trim(),opmerking:(fd.get('opmerking')||'').trim()});
+    const voorV=fd.get('voor')||'';await db.saveWeekend({id,naam:fd.get('naam').trim(),label:fd.get('label'),voor:voorV?voorV.split(''):null,datum:fd.get('datum').trim(),start_datum:fd.get('start_datum').trim()||null,slots,startdag:fd.get('startdag').trim(),crewmeeting:fd.get('crewmeeting').trim(),terugkomavond:fd.get('terugkomavond').trim(),opmerking:(fd.get('opmerking')||'').trim(),sheet_url:(fd.get('sheet_url')||'').trim()||null});
     await refresh();toast('Weekend opgeslagen');return;}
   if(f.id==='twForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={user:fd.get('user'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
