@@ -35,6 +35,7 @@
 :root[data-brand="4M"] h2{font-weight:700;text-transform:uppercase;letter-spacing:.02em}
 :root[data-brand="4M"] .row .lab,:root[data-brand="4M"] .roltab th{font-weight:700}
 :root[data-brand="4M"] button.primary{background:var(--accent);border-color:var(--accent)}
+:root[data-brand="4M"] .hero h1{font-size:clamp(40px,7vw,72px)}
 @media (prefers-color-scheme:dark){:root[data-brand="4M"]:not([data-theme="light"]){--bg:#000000;--panel:#111111;--panel2:#1f1f1f;--line:#777777;--ink:#ffffff;--muted:#a8a8a8;--hero:#000000;--hero-ink:#ffffff;--logo:#dd0000;--logo-ink:#ffffff;--sand:#2a2a2a;--sand-ink:#ffffff;--field:#1f1f1f;--accent:#ff1a1a;--accent-ink:#ffffff;--accent-soft:#3a0e0e;--pot:#ffffff;--pot-soft:#2a2a2a;}}
 :root[data-brand="4M"][data-theme="dark"]{--bg:#000000;--panel:#111111;--panel2:#1f1f1f;--line:#777777;--ink:#ffffff;--muted:#a8a8a8;--hero:#000000;--hero-ink:#ffffff;--logo:#dd0000;--logo-ink:#ffffff;--sand:#2a2a2a;--sand-ink:#ffffff;--field:#1f1f1f;--accent:#ff1a1a;--accent-ink:#ffffff;--accent-soft:#3a0e0e;--pot:#ffffff;--pot-soft:#2a2a2a;}
 /* Arise — Playfair Display (koppen), Lato (tekst), bordeaux #6A3C3F en goud #A99F71 */
@@ -59,7 +60,9 @@
 :root[data-brand="LI"][data-theme="dark"]{--bg:#0e0e0e;--panel:#1a1a1a;--panel2:#262626;--line:#6a6a6a;--ink:#f0f0f0;--muted:#a8a8a8;--hero:#000000;--sand:#0d3e5d;--sand-ink:#ffffff;--field:#262626;--accent:#ff1a1a;--accent-soft:#3a0e0e;--pot:#9fc2dd;--pot-soft:#1c2b36;}
 .brandtag{display:none}
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;margin:0;padding:0}
+:root{--shadow:0 1px 2px rgba(0,0,0,.06),0 10px 30px rgba(0,0,0,.07);--r:6px;--border:#e2e2e2}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--border:#333;--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35)}}
 .wrap{max-width:1040px;margin:0 auto;padding-inline:16px}
 h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:.01em}
 h1{font-size:clamp(34px,6vw,60px);font-weight:700;text-transform:uppercase;line-height:1;color:var(--hero-ink)}
@@ -79,34 +82,42 @@ h3{font-size:16px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
 .steps button{background:transparent;border:0;border-bottom:2px solid transparent;border-radius:0;padding:10px 12px;font-size:14px;font-weight:700;color:var(--hero-ink);opacity:.75;text-transform:uppercase;letter-spacing:.04em}
 .steps button:hover{opacity:1}
 .steps button:disabled{opacity:.35;cursor:not-allowed}
-.steps button.on{opacity:1;border-bottom-color:var(--logo)}
+.steps button.on{opacity:1;border-bottom-color:var(--logo);border-bottom-width:3px}
 .who{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--hero-ink)}
 .who label{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.75}
 .who select,.who button{background:rgba(255,255,255,.12);color:var(--hero-ink);border-color:rgba(255,255,255,.25)}
 .who option{color:#000}
 .hero{background:var(--hero);color:var(--hero-ink)}
-.hero .in{max-width:1040px;margin:0 auto;padding:28px 16px 40px}
+.hero .in{max-width:1040px;margin:0 auto;padding:36px 16px 56px}
+.hero h1{position:relative;padding-bottom:14px}
+.hero h1:after{content:"";position:absolute;left:0;bottom:0;width:56px;height:5px;background:var(--logo)}
 .hero .sub{margin-top:10px;opacity:.75;font-size:14px}
 select,button,input,textarea{font:inherit;color:var(--ink)}
-select,input[type=text],input[type=email],textarea{background:var(--field);border:1px solid transparent;border-radius:0;padding:10px 12px;max-width:100%;font-weight:600}
+select,input[type=text],input[type=email],textarea{background:var(--panel);border:1px solid var(--border);border-radius:3px;padding:10px 12px;max-width:100%;font-weight:500;transition:border-color .12s}
+select:focus,input:focus,textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
 textarea{width:100%;min-height:70px}
-button{background:var(--sand);color:var(--sand-ink);border:1px solid var(--sand);border-radius:0;padding:9px 18px;cursor:pointer;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:12px}
-button:hover{filter:brightness(.95)}
+button{background:var(--panel);color:var(--ink);border:2px solid var(--ink);border-radius:3px;padding:10px 20px;cursor:pointer;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-size:12px;transition:transform .08s,filter .12s}
+button:hover{filter:brightness(.92)}
+button:active{transform:translateY(1px)}
 button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 button.small{padding:5px 10px;font-size:11px}
 button:disabled{opacity:.45;cursor:not-allowed}
-.userbox{border:1px solid var(--line);padding:22px 24px;margin-top:-24px;background:var(--panel);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.userbox{border:0;border-radius:var(--r);box-shadow:var(--shadow);padding:22px 24px;margin-top:-28px;background:var(--panel);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.userbox[hidden]{display:none}
+.intro{background:var(--panel);border:0;border-radius:var(--r);box-shadow:var(--shadow);padding:24px 28px;margin-top:-28px;font-size:16px;line-height:1.65}
+.intro b{color:var(--accent)}
 .userbox .t{font-family:var(--display);text-transform:uppercase;font-size:22px;font-weight:700;letter-spacing:.02em}
 .userbox .n{color:var(--muted);font-size:13px}
 .userbox .r{margin-left:auto}
-.band{height:30px;background:var(--sand);margin-top:28px}
+.band{height:0;margin-top:28px}
 .pager{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-block:24px 48px}
 .pager .right{display:flex;gap:10px;margin-left:auto}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:0;padding:12px 24px 20px;margin-block:0 8px}
-.panel>h2{padding:12px 0 6px;font-size:22px}
+.panel{background:var(--panel);border:0;border-top:4px solid var(--accent);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 28px 22px;margin-block:0 8px}
+.panel>h2{padding:12px 0 8px;font-size:24px}
+:root[data-brand="AR"] .panel{border-top-color:var(--gold)}
 .panel>.body{padding:0}
-.row{padding:16px 0;border-bottom:1px solid var(--panel2)}
+.row{padding:16px 0;border-bottom:1px solid var(--border)}
 .row:last-child{border-bottom:0}
 .row .lab{font-weight:700;font-size:15px;display:flex;align-items:center;gap:12px}
 .row .help{color:var(--muted);font-size:13px;margin-top:6px}
@@ -122,22 +133,22 @@ button:disabled{opacity:.45;cursor:not-allowed}
 @media (prefers-reduced-motion:reduce){.sw i,.sw i:before{transition:none}}
 .roltab{width:100%;max-width:520px;border-collapse:collapse;margin-top:6px}
 .roltab th{font-size:12px;padding:6px 8px}
-.roltab td{padding:8px;border-bottom:1px solid var(--panel2)}
+.roltab td{padding:9px 8px;border-bottom:1px solid var(--border)}
 .roltab td:first-child{font-weight:600}
 .roltab td.c{text-align:center;width:120px}
 .roltab.nieuw .vervuld{display:none}
-.note{background:var(--panel2);border-left:4px solid var(--sand);border-radius:0;padding:10px 12px;font-size:13px;color:var(--muted)}
+.note{background:var(--panel2);border-left:4px solid var(--accent);border-radius:3px;padding:12px 14px;font-size:14px;color:var(--muted)}
 .note b{color:var(--ink)}
-.banner{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--warn-soft);border-left:4px solid var(--warn);padding:10px 12px;border-radius:0;font-size:13px}
+.banner{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--warn-soft);border-left:4px solid var(--warn);padding:10px 12px;border-radius:3px;font-size:13px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-block:12px}
-.stat{background:var(--panel2);border-radius:0;padding:10px 12px}
+.stat{background:var(--panel2);border-radius:var(--r);padding:12px 14px}
 .stat .v{font-family:var(--display);font-size:28px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .stat .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-block:10px}
 table{border-collapse:collapse;width:100%;font-size:13px}
 .tw{overflow-x:auto}
-th{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;font-size:12px;color:var(--muted);text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:7px 8px;border-bottom:1px solid var(--panel2);vertical-align:top}
+th{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;font-size:13px;color:var(--muted);text-align:left;padding:8px;border-bottom:2px solid var(--ink);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:top}
 tr:last-child td{border-bottom:0}
 .name{font-weight:600;white-space:nowrap}
 .chips{display:inline-flex;flex-wrap:wrap;gap:6px;vertical-align:middle}
@@ -148,6 +159,8 @@ tr:last-child td{border-bottom:0}
 .over{color:var(--warn);font-weight:700}
 .overnote{background:var(--warn-soft);border-left:4px solid var(--warn);padding:6px 10px;font-size:12px;margin-top:4px}
 .chip.potentieel{background:var(--pot-soft);color:var(--pot);border-color:var(--pot);border-style:dashed}
+.chip.stil{opacity:.7}
+.chip small{font-size:10px;opacity:.8}
 .chip .act{display:inline-flex;gap:2px}
 .chip .act button{padding:0 5px;font-size:12px;line-height:18px;border-radius:0;background:transparent;border-color:currentColor;color:inherit;text-transform:none;letter-spacing:0}
 .tag{display:inline-block;border-radius:4px;padding:1px 6px;font-size:11px;font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;background:var(--panel2);color:var(--muted)}
@@ -194,7 +207,7 @@ tr:last-child td{border-bottom:0}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--panel2);padding:1px 5px;border-radius:4px}
 .toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
 .toast.show{opacity:1}
-.errbox{display:none;margin:14px 0 0;padding:12px 16px;border:2px solid #c0392b;background:#fdf1ef;color:#7a1f14;font-size:14px;line-height:1.45;border-radius:4px}
+.errbox{display:none;margin:14px 0 0;padding:12px 16px;border-left:4px solid #c0392b;background:#fdf1ef;color:#7a1f14;font-size:14px;line-height:1.45;border-radius:3px;box-shadow:var(--shadow)}
 .errbox.show{display:block}
 .errbox b{display:block;margin-bottom:2px}
 .errbox ul{margin:4px 0 0 18px;padding:0}
@@ -227,7 +240,7 @@ const LOGO_ALT={'4M':'4M','AR':'Arise','LI':'LIFE Netwerk','C58':'Coalition:58'}
 const ERVARING = ['nieuw','1-3 keer','4-7 keer','8-15 keer','15+ keer'];
 const fmtErv=e=>!e?'':e==='nieuw'?'nog niet meegeweest':e.replace(' keer','x')+' meegeweest';
 const MAX_OK=3; // vaker dan dit gekozen = oranje
-const ROL_NAAM={PL:'Projectleider',GL:'Geestelijk leider',FL:'Facilitair leider'};
+const ROL_NAAM={PL:'Projectleider',GL:'Geestelijk leider',FL:'Facilitair leider',Muzikant:'Aanbiddingsleider/Muzikant'};
 const fmtRol=r=>ROL_NAAM[r]||r;
 const fmtRollen=a=>(a||[]).map(fmtRol).join(', ');
 const fmtRolStr=t=>String(t).replace(/\b(PL|GL|FL)\b/g,m=>ROL_NAAM[m]);
@@ -256,8 +269,8 @@ const DEMO = {
           {id:'4F',naam:'4Family',voor:['M','V'],leider_m:'u_wouter',leider_v:'u_nadine'},
           {id:'AR',naam:'Arise',voor:['V'],gast:['M'],leider_m:'u_nadine',leider_v:'u_nadine'},
           {id:'LI',naam:'LIFE',voor:['M','V'],leider_m:'u_auke',leider_v:'u_auke'},
-          {id:'PR',naam:'Promo (events)',voor:['M','V'],leider_m:null,leider_v:null}],
-  rollen:['PL','GL','FL','Spreker','Route','Routeleider','Facilitair','EHBO','Coach','Foto/video'],
+          {id:'PR',naam:'Promo (Events)',voor:['M','V'],leider_m:null,leider_v:null}],
+  rollen:['PL','GL','FL','Spreker','Route','Routeleider','Facilitair','EHBO','Coach','Muzikant','Foto/video'],
   weekends:[
     {id:'w1',label:'4M',naam:'Winterweekenden',datum:'5–7 feb 2027',start_datum:'2027-02-05',slots:{PL:1,GL:2,FL:2,Spreker:2,Route:3,Facilitair:2,EHBO:1},startdag:'',terugkomavond:'',crewmeeting:'Crewavond 13 maart 2027'},
     {id:'w2',label:'4M',naam:'Karakterweekend Schotland',datum:'15–18 apr 2027',start_datum:'2027-04-15',opmerking:'Crew vertrekt al op woensdag. Goede conditie nodig: dagtochten van 20+ km.',slots:{PL:1,GL:1,FL:1,Spreker:2,Routeleider:1,Route:3,EHBO:1,'Foto/video':1},startdag:'Startdag 20 maart 2027',terugkomavond:'Terugkomavond 20 mei 2027',crewmeeting:'Online crewavond 6 april 2027'},
@@ -317,7 +330,7 @@ function LocalStore(){
   const seed=()=>{
     const goedkeuringen=[];
     DEMO.intake.forEach(i=>{
-      i.vervuld.forEach(r=>goedkeuringen.push({crew:i.crew,label:i.label,rol:r,status:'voorgesteld',bron:'vervuld',door:'kantoor',datum:'2026-09-21',notitie:''}));
+      i.vervuld.forEach(r=>goedkeuringen.push({crew:i.crew,label:i.label,rol:r,status:'goedgekeurd',bron:'vervuld',door:null,datum:'2026-09-21',notitie:''}));
       i.voorkeur.filter(r=>!i.vervuld.includes(r)).forEach(r=>goedkeuringen.push({crew:i.crew,label:i.label,rol:r,status:'voorgesteld',bron:'voorkeur',door:'crewlid',datum:'2026-09-21',notitie:''}));
     });
     const set=(c,l,r,st,door,n='')=>{const g=goedkeuringen.find(x=>x.crew===c&&x.label===l&&x.rol===r);if(g){g.status=st;g.door=door;g.notitie=n;g.datum='2026-09-28';}};
@@ -338,7 +351,7 @@ function LocalStore(){
     async load(){return JSON.parse(JSON.stringify(S));},
     async saveIntake(i){const k=S.intake.findIndex(x=>x.crew===i.crew&&x.label===i.label);if(k>=0)S.intake[k]=i;else S.intake.push(i);
       [...i.vervuld.map(r=>[r,'vervuld']),...i.voorkeur.filter(r=>!i.vervuld.includes(r)).map(r=>[r,'voorkeur'])].forEach(([r,bron])=>{
-        if(!S.goedkeuringen.some(g=>g.crew===i.crew&&g.label===i.label&&g.rol===r))S.goedkeuringen.push({crew:i.crew,label:i.label,rol:r,status:'voorgesteld',bron,door:bron==='vervuld'?'kantoor':'crewlid',datum:today(),notitie:''});});
+        if(!S.goedkeuringen.some(g=>g.crew===i.crew&&g.label===i.label&&g.rol===r))S.goedkeuringen.push({crew:i.crew,label:i.label,rol:r,status:bron==='vervuld'?'goedgekeurd':'voorgesteld',bron,door:bron==='vervuld'?null:'crewlid',datum:today(),notitie:''});});
       save();},
     async deleteIntake(crew,label){S.intake=S.intake.filter(i=>!(i.crew===crew&&i.label===label));save();},
     async setStatus(g,status,door,notitie=''){const x=S.goedkeuringen.find(y=>y.crew===g.crew&&y.label===g.label&&y.rol===g.rol);x.status=status;x.door=door;x.datum=today();x.notitie=notitie;save();},
@@ -425,7 +438,7 @@ const labelsVoor=u=>M.labels.filter(l=>!l.voor||!u.geslacht||l.voor.includes(u.g
 const isGast=(l,u)=>!!(l&&l.gast&&u&&u.geslacht&&!(l.voor||[]).includes(u.geslacht)&&l.gast.includes(u.geslacht));
 const gastLabelsVoor=u=>M.labels.filter(l=>isGast(l,u));
 /* Gast ziet de weekenden pas als hij eerder mee was, of na validatie door de bewegingsleider. */
-const gastToegang=(c,l)=>{const i=intakeOf(c,l);return !!i&&(i.ervaring!=='nieuw'||approvedRoles(c,l).length>0);};
+const gastToegang=(c,l)=>{const i=intakeOf(c,l);return !!i&&(i.ervaring!=='nieuw'||gescreend(c,l).length>0);};
 // bewegingsleider voor (label, geslacht)
 const leiderVoor=(l,geslacht)=>{const L=lbl(l);if(!L)return null;return geslacht==='V'?L.leider_v:geslacht==='M'?L.leider_m:(L.leider_m||L.leider_v);};
 const screenDoorMij=(cid,l)=>isKantoor()||leiderVoor(l,user(cid)?.geslacht)===me.id;
@@ -434,8 +447,12 @@ const medischVan=c=>(D.medisch||[]).find(m=>m.crew===c);
 const medischBekend=c=>!!medischVan(c)?.ingevuld;
 const intakeOf=(c,l)=>D.intake.find(i=>i.crew===c&&i.label===l);
 const G=(c,l)=>D.goedkeuringen.filter(g=>g.crew===c&&(!l||g.label===l));
-const isApproved=(c,l,r)=>D.goedkeuringen.some(g=>g.crew===c&&g.label===l&&g.rol===r&&g.status==='goedgekeurd');
-const approvedRoles=(c,l)=>G(c,l).filter(g=>g.status==='goedgekeurd').map(g=>g.rol);
+/* Gescreend (goedgekeurd) ongeacht wens. Vervulde functies worden automatisch goedgekeurd; de leider kan alleen afkeuren. */
+const gescreend=(c,l)=>G(c,l).filter(g=>g.status==='goedgekeurd').map(g=>g.rol);
+/* Kiesbaar voor de PL = goedgekeurd EN door het crewlid gewenst voor 2027. Wat iemand ooit deed telt alleen voor de screening. */
+const wil=(c,l)=>intakeOf(c,l)?.voorkeur||[];
+const isApproved=(c,l,r)=>wil(c,l).includes(r)&&D.goedkeuringen.some(g=>g.crew===c&&g.label===l&&g.rol===r&&g.status==='goedgekeurd');
+const approvedRoles=(c,l)=>gescreend(c,l).filter(r=>wil(c,l).includes(r));
 const isAvail=(c,w)=>(D.beschikbaar[c]||[]).includes(w);
 const timesChosen=c=>Object.values(D.indeling).reduce((n,s)=>n+Object.values(s).filter(v=>v===c).length,0);
 const isPotential=g=>g.bron==='voorkeur'&&g.status!=='afgewezen';
@@ -484,8 +501,9 @@ function renderWho(){
 function chip(g,canJudge){
   const acts=canJudge?`<span class="act">${g.status!=='goedgekeurd'?`<button data-ok="${g.crew}|${g.label}|${g.rol}" title="Goedkeuren">✓</button>`:''}${g.status!=='afgewezen'?`<button data-no="${g.crew}|${g.label}|${g.rol}" title="Afwijzen">✕</button>`:''}</span>`:'';
   const cls=g.status==='voorgesteld'&&isPotential(g)?'potentieel':g.status;
-  const t=g.status==='voorgesteld'?(isPotential(g)?'voorkeur van het crewlid, nog niet vervuld':'voorgesteld op basis van vervulde functie'):`${g.status} door ${user(g.door)?.naam||g.door} op ${g.datum}${g.notitie?': '+g.notitie:''}`;
-  return `<span class="chip ${cls}" title="${esc(t)}">${esc(fmtRol(g.rol))}${acts}</span>`;
+  const t=g.status==='voorgesteld'?(isPotential(g)?'voorkeur van het crewlid, nog niet vervuld':'voorgesteld op basis van vervulde functie'):g.status==='goedgekeurd'&&!g.door?'eerder vervuld, automatisch goedgekeurd (alleen afkeuren mogelijk)':`${g.status} door ${user(g.door)?.naam||g.door} op ${g.datum}${g.notitie?': '+g.notitie:''}`;
+  const nietGewenst=g.status==='goedgekeurd'&&!wil(g.crew,g.label).includes(g.rol);
+  return `<span class="chip ${cls}${nietGewenst?' stil':''}" title="${esc(t)}${nietGewenst?' · niet gewenst voor 2027, telt alleen als ervaring':''}">${esc(fmtRol(g.rol))}${nietGewenst?' <small>(ervaring)</small>':''}${acts}</span>`;
 }
 
 function viewGoedkeuring(){
@@ -506,17 +524,29 @@ function viewGoedkeuring(){
   const scope=isLeider()?M.labels.flatMap(l=>[l.leider_m===me.id?l.naam+' (mannen)':null,l.leider_v===me.id?l.naam+' (vrouwen)':null]).filter(Boolean).join(', '):'';
   return `<div class="band"></div><section class="panel">
     <h2>Screening per label × rol</h2><div class="body">
-    <p class="muted" style="margin:4px 0 10px">${!isLeider()?'Kantoor stelt voor, alleen de bewegingsleider screent.':`Je screent: ${esc(scope)}. Eén chip = één beslissing. Pas na goedkeuring komt iemand in de keuzelijst van de projectleider. Gestippeld = voorkeur, nog niet vervuld.`}</p>
+    <p class="muted" style="margin:4px 0 10px">${!isLeider()?'Kantoor stelt voor, alleen de bewegingsleider screent.':`Je screent: ${esc(scope)}. Vervulde functies zijn automatisch goedgekeurd (groen); daar hoef je alleen in te grijpen als iemand niet meer in die rol past (kruisje). Gestippeld = gewenste rol die iemand nog niet vervuld heeft: die beoordeel jij. Kiesbaar voor de projectleider wordt alleen wat goedgekeurd én dit jaar gewenst is.`}</p>
     <div class="banner"><b>Deadline ${DEADLINE}.</b> Daarna begint het indelen. Wie dan nog niet gescreend is, staat wel als beschikbaar in het systeem maar niet in de keuzelijst van de projectleider.</div>
     <div class="stats">
       <div class="stat"><div class="v">${cnt('voorgesteld')}</div><div class="l">te beoordelen</div></div>
       <div class="stat"><div class="v">${mine.filter(g=>g.status==='voorgesteld'&&isPotential(g)).length}</div><div class="l">waarvan potentieel</div></div>
-      <div class="stat"><div class="v">${cnt('goedgekeurd')}</div><div class="l">goedgekeurd</div></div>
+      <div class="stat"><div class="v">${mine.filter(g=>g.status==='goedgekeurd'&&!g.door).length}</div><div class="l">ervaren, automatisch</div></div>
+      <div class="stat"><div class="v">${mine.filter(g=>g.status==='goedgekeurd'&&g.door).length}</div><div class="l">goedgekeurd door jou</div></div>
       <div class="stat"><div class="v">${crewUsers().filter(c=>D.weekends.some(w=>labels.includes(w.label)&&isAvail(c.id,w.id))&&!labels.some(l=>approvedRoles(c.id,l).length)).length}</div><div class="l">beschikbaar, nog niet kiesbaar</div></div>
     </div>
-    ${isLeider()?`<div class="tools"><button class="primary small" id="bulkOk">Alle voorstellen uit vervulde functies goedkeuren (${mine.filter(g=>g.status==='voorgesteld'&&!isPotential(g)).length})</button><span class="muted">Potentieel blijft altijd handwerk.</span></div>`:add}
+    ${isLeider()?'':add}
     <div class="tw"><table><thead><tr><th>Crewlid</th><th>Intake en beslissingen</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="muted">Nog geen intake of voorstellen.</td></tr>'}</tbody></table></div>
-    <p class="note" style="margin-top:12px">Niet zichtbaar hier: mail, telefoon. Afwijs-notities gaan nooit mee naar de exportsheet.</p></div></section>`;
+    <p class="note" style="margin-top:12px">Niet zichtbaar hier: mail, telefoon. Afwijs-notities gaan nooit mee naar de exportsheet.</p></div></section>
+    ${ervarenPerFunctie(mine)}`;
+}
+/* Informatieve lijst per functie: wie heeft die functie eerder vervuld (automatisch goedgekeurd). Alleen afkeuren mogelijk. */
+function ervarenPerFunctie(mine){
+  const erv=mine.filter(g=>g.bron==='vervuld'&&g.status!=='afgewezen');
+  const byRol={};erv.forEach(g=>(byRol[g.rol]=byRol[g.rol]||[]).push(g));
+  const rows=M.rollen.filter(r=>byRol[r]).map(r=>`<tr><td class="name">${esc(fmtRol(r))}<div class="muted" style="font-weight:400;font-size:12px">${byRol[r].length} ervaren</div></td><td>${byRol[r].sort((a,b)=>user(a.crew).naam.localeCompare(user(b.crew).naam)).map(g=>{const i=intakeOf(g.crew,g.label);const w=wil(g.crew,g.label).includes(r);
+    return `<div style="margin-bottom:4px">${esc(user(g.crew).naam)} <span class="tag lbl">${esc(lbl(g.label).naam)}</span> <span class="muted" style="font-size:12px">${esc(fmtErv(i?.ervaring))}${w?'':' · wil dit in 2027 niet'}</span> ${chip(g,isLeider()||isKantoor())}</div>`;}).join('')}</td></tr>`).join('');
+  return `<div class="band"></div><section class="panel"><h2>Ervaren crew per functie</h2><div class="body">
+    <p class="muted">Wie deze functie eerder vervulde, is automatisch goedgekeurd en hoeft niet opnieuw gescreend te worden. Past iemand er niet meer in? Klik op het kruisje. "Wil dit in 2027 niet" betekent: wel ervaring, maar niet kiesbaar voor de projectleider in deze rol.</p>
+    <div class="tw"><table><thead><tr><th>Functie</th><th>Ervaren crew</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="muted">Nog niemand met vervulde functies.</td></tr>'}</tbody></table></div></div></section>`;
 }
 
 function viewPotentieel(){
@@ -525,13 +555,13 @@ function viewPotentieel(){
   const byRol={};pot.forEach(g=>(byRol[g.rol]=byRol[g.rol]||[]).push(g));
   const rows=M.rollen.filter(r=>byRol[r]).map(r=>`<tr><td class="name">${esc(fmtRol(r))}</td><td>${byRol[r].map(g=>{const i=intakeOf(g.crew,g.label);return `<div style="margin-bottom:4px">${esc(user(g.crew).naam)} <span class="tag lbl">${esc(lbl(g.label).naam)}</span> <span class="muted" style="font-size:12px">${esc(fmtErv(i?.ervaring))}, nu: ${esc(fmtRollen(i?.vervuld)||'geen rol')}</span> ${chip(g,isLeider())}</div>`;}).join('')}</td></tr>`).join('');
   return `<div class="band"></div><section class="panel"><h2>Potentieel scannen</h2><div class="body">
-    <p class="muted">Crewleden die een rol als voorkeur opgaven die ze nog niet vervuld hebben. Goedkeuren zet ze in de keuzelijst voor die rol; afwijzen laat ze in hun huidige rol.</p>
+    <p class="muted">Crewleden die een rol willen die ze nog niet vervuld hebben. Dit is de enige screening die handwerk is: goedkeuren zet ze in de keuzelijst voor die rol, afwijzen laat ze in hun huidige rol(len).</p>
     <div class="tw"><table><thead><tr><th>Gewenste rol</th><th>Wie</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="muted">Geen open voorkeuren.</td></tr>'}</tbody></table></div></div></section>`;
 }
 
 function viewAccount(){
   return `<div class="band"></div><section class="panel"><h2>Stap 1: jouw gegevens</h2><div class="body">
-    <p class="muted">Ingelogd met ${esc(me.email||'')}. Dit is het adres waarop we je mailen.</p>
+    <p class="muted">Ingelogd met ${esc(me.email||'')}. Dit is het adres waarop we je mailen. Vul de vier stappen in vóór <b>${DEADLINE}</b>.</p>
     <form id="welkomForm" novalidate>
       <div class="row"><label class="lab" for="wNaam">Voor- en achternaam</label><div class="ctl"><input type="text" id="wNaam" name="naam" required value="${esc(me.naam||'')}" style="min-width:280px"></div></div>
       <div class="row"><label class="lab" for="wTel">Telefoonnummer</label><div class="help">Voor de appgroep en bij last-minute vragen.</div><div class="ctl"><input type="text" id="wTel" name="telefoon" required value="${esc(demoTel(me)||'')}" style="min-width:200px"></div></div>
@@ -558,7 +588,7 @@ function viewMedisch(){
   </div></section>
   <div class="band"></div><section class="panel"><h2>In geval van nood (ICE)</h2><div class="body">
     <div class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
-      <label class="field"><span>Naam</span><input type="text" name="ice_naam" value="${esc(m.ice_naam||'')}"></label>
+      <label class="field"><span>Voor- en achternaam</span><input type="text" name="ice_naam" value="${esc(m.ice_naam||'')}"></label>
       <label class="field"><span>Telefoonnummer</span><input type="text" name="ice_telefoon" value="${esc(m.ice_telefoon||'')}" required></label>
       <label class="field"><span>Relatie tot jou</span><input type="text" name="ice_relatie" value="${esc(m.ice_relatie||'')}" placeholder="partner, ouder, vriend(in)"></label>
     </div>
@@ -638,7 +668,7 @@ function viewUitvraag(){
   const blocks=labels.map(l=>{if(isGast(l,cu)&&!gastToegang(c,l.id))return `<div class="band"></div><section class="panel"><h2>${esc(l.naam)}</h2><div class="body"><p class="muted">Je aanvraag om als crew mee te gaan met ${esc(l.naam)} ligt bij de bewegingsleider. Zodra die akkoord is, kun je hier je beschikbaarheid aangeven.</p></div></section>`;const ws=D.weekends.filter(w=>w.label===l.id&&wkPastBij(w,cu));if(!ws.length)return '';
     return `<div class="band"></div><section class="panel"><h2>${esc(l.naam)}</h2><div class="body">${ws.map(row).join('')}</div></section>`;}).join('');
   return `${!self?`<div class="tools" style="margin-top:16px"><label for="crewSel" class="muted">Bekijk als:</label><select id="crewSel">${crewUsers().map(x=>`<option value="${x.id}" ${x.id===c?'selected':''}>${esc(x.naam)}</option>`).join('')}</select></div>`:''}
-    ${self&&ingeleverd()?`<div class="band"></div><section class="panel"><h2>Bedankt, je opgave is binnen</h2><div class="body">${(()=>{const av=D.weekends.filter(w=>isAvail(c,w.id)&&wkPastBij(w,cu)).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||''));return `<p>Je staat beschikbaar voor <b>${av.length}</b> weekend(en) bij ${esc(labels.map(l=>l.naam).join(', ')||'nog geen label')}:</p>${av.length?`<ul style="margin:6px 0 14px 18px;padding:0">${av.map(w=>`<li><b>${esc(w.naam)}</b> <span class="muted">${esc(w.datum)} · ${esc(lbl(w.label).naam)}</span></li>`).join('')}</ul>`:''}<p>De bewegingsleider screent je rollen; daarna kan de projectleider je indelen. Je hoort van ons.</p>`;})()}<p class="muted">Verandert er iets? Pas het hieronder aan en klik opnieuw op inleveren.</p></div></section>`:''}<p class="note" style="margin-top:24px"><b>Stap 4: beschikbaarheid.</b> Zet aan waar je kunt en klik onderaan op <b>Opslaan en inleveren</b>. Zodra je een weekend aanzet, zie je de bijbehorende dagen en bijzonderheden.</p>${blocks||'<div class="band"></div><section class="panel"><h2>Nog geen labels gekozen</h2><div class="body"><p class="muted">Kies eerst onder Mijn gegevens voor welke labels je je wilt inzetten.</p></div></section>'}`;
+    ${self&&ingeleverd()?`<div class="band"></div><section class="panel"><h2>Bedankt, je opgave is binnen</h2><div class="body">${(()=>{const av=D.weekends.filter(w=>isAvail(c,w.id)&&wkPastBij(w,cu)).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||''));return `<p>Je staat beschikbaar voor <b>${av.length}</b> weekend(en) bij ${esc(labels.map(l=>l.naam).join(', ')||'nog geen label')}:</p>${av.length?`<ul style="margin:6px 0 14px 18px;padding:0">${av.map(w=>`<li><b>${esc(w.naam)}</b> <span class="muted">${esc(w.datum)} · ${esc(lbl(w.label).naam)}</span></li>`).join('')}</ul>`:''}<p>De bewegingsleider screent je rollen; daarna kan de projectleider je indelen. Je hoort van ons.</p>`;})()}<p class="muted">Verandert er iets? Pas het hieronder aan en klik opnieuw op inleveren.</p></div></section>`:''}<p class="note" style="margin-top:24px"><b>Stap 4: beschikbaarheid.</b> Zet aan waar je kunt en klik onderaan op <b>Opslaan en inleveren</b>, uiterlijk <b>${DEADLINE}</b>. Zodra je een weekend aanzet, zie je de bijbehorende dagen en bijzonderheden.</p>${blocks||'<div class="band"></div><section class="panel"><h2>Nog geen labels gekozen</h2><div class="body"><p class="muted">Kies eerst onder Mijn gegevens voor welke labels je je wilt inzetten.</p></div></section>'}`;
 }
 
 // indelingsblok voor één weekend: per rol links de rol, dan het aantal (uitklapvak), dan evenveel keuzevakjes met beschikbare crew
@@ -653,7 +683,7 @@ function slotsHtml(w,editable,onlyRol,canEditSlots){
         if(cur===c.id)return `<option value="${c.id}" selected>${esc(c.naam)}</option>`;return null;}).filter(Boolean).join('');
       return editable?`<span class="pick"><select data-slot="${key}" data-wk="${w.id}" class="${cur&&timesChosen(cur)>MAX_OK?'over':''}"><option value="">niet ingedeeld</option>${opts}</select>${cur&&overTxt(cur)?`<div class="overnote">${esc(overTxt(cur))}</div>`:''}</span>`
         :`<span class="pick"><b class="${cur&&timesChosen(cur)>MAX_OK?'over':''}">${cur?esc(user(cur).naam):'nog open'}</b></span>`;};
-    const blocked=n?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!isApproved(c.id,w.label,rol)&&(intakeOf(c.id,w.label)?.vervuld||[]).concat(intakeOf(c.id,w.label)?.voorkeur||[]).includes(rol)).map(c=>c.naam):[];
+    const blocked=n?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!isApproved(c.id,w.label,rol)&&wil(c.id,w.label).includes(rol)).map(c=>c.naam):[];
     const cnt=canEditSlots?`<select data-slotcount="${rol}" data-wk="${w.id}" title="Aantal nodig">${Array.from({length:11},(_,k)=>`<option value="${k}" ${k===n?'selected':''}>${k}</option>`).join('')}</select>`:`<span class="muted">${n}</span>`;
     return `<div class="slotrow"><div class="r">${esc(fmtRol(rol))}</div><div class="cnt">${cnt}</div><div class="picks">${Array.from({length:n},(_,i)=>sel(i+1)).join('')}${!n&&canEditSlots?'<span class="muted" style="font-size:12px;align-self:center">niet nodig</span>':''}${blocked.length?`<div class="muted" style="font-size:12px;flex-basis:100%">Beschikbaar, nog niet gescreend voor ${esc(fmtRol(rol))}: ${blocked.map(esc).join(', ')}</div>`:''}</div></div>`;}).join('');
 }
@@ -679,7 +709,7 @@ function viewAanmeldingen(){
   return kies+[cur].map(({w,rollen,alles,functies})=>{
     const rolFilter=alles?null:[...rollen];
     const canEdit=functies.has('PL');
-    const av=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&(!rolFilter||approvedRoles(c.id,w.label).some(r=>rolFilter.includes(r))||(intakeOf(c.id,w.label)?.vervuld||[]).some(r=>rolFilter.includes(r))));
+    const av=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&(!rolFilter||approvedRoles(c.id,w.label).some(r=>rolFilter.includes(r))||wil(c.id,w.label).some(r=>rolFilter.includes(r))));
     const list=av.map(c=>{const i=intakeOf(c.id,w.label);const roles=approvedRoles(c.id,w.label).filter(r=>!rolFilter||rolFilter.includes(r));
       return `<tr><td class="name ${timesChosen(c.id)>MAX_OK?'over':''}" title="${esc(overTxt(c.id))}">${esc(c.naam)}${timesChosen(c.id)?` <span class="muted" style="font-weight:400">${timesChosen(c.id)}x</span>`:''}</td><td>${roles.length?esc(fmtRollen(roles)):'<span class="muted">nog niet gescreend</span>'}</td><td>${esc(fmtErv(i?.ervaring))}</td><td>${esc(i?.toelichting||'')}</td></tr>`;}).join('');
     return `<div class="band"></div><section class="panel"><h2>${esc(w.naam)} <span class="muted" style="font-size:14px;text-transform:none;letter-spacing:0">${esc(w.datum)} · jij: ${esc(fmtRollen([...functies]))}${rolFilter?' · alleen '+esc(fmtRollen(rolFilter)):''}</span></h2><div class="body">
@@ -697,12 +727,12 @@ function viewExport(){
   const ind=D.indeling[w.id]||{};
   const leftRows=Object.entries(w.slots).flatMap(([rol,n])=>Array.from({length:n},(_,i)=>[rol,ind[`${rol}#${i+1}`]]));
   const av=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&approvedRoles(c.id,w.label).length);
-  const tsv=['Rol\tNaam',...leftRows.map(([r,c])=>`${fmtRol(r)}\t${c?user(c).naam:''}`),'','Naam\tVervulde functies\tGoedgekeurde functies\tErvaring\tAantal keer gekozen',...av.map(c=>{const i=intakeOf(c.id,w.label);return `${c.naam}\t${fmtRollen(i?.vervuld)}\t${fmtRollen(approvedRoles(c.id,w.label))}\t${fmtErv(i?.ervaring)}\t${timesChosen(c.id)}`;})].join('\n');
+  const tsv=['Rol\tNaam',...leftRows.map(([r,c])=>`${fmtRol(r)}\t${c?user(c).naam:''}`),'','Naam\tVervulde functies\tKiesbare functies\tErvaring\tAantal keer gekozen',...av.map(c=>{const i=intakeOf(c.id,w.label);return `${c.naam}\t${fmtRollen(i?.vervuld)}\t${fmtRollen(approvedRoles(c.id,w.label))}\t${fmtErv(i?.ervaring)}\t${timesChosen(c.id)}`;})].join('\n');
   return `<div class="band"></div><section class="panel"><h2>Exportsheet: ${esc(w.naam)} ${esc(w.datum)}</h2><div class="body">
     <div class="tools"><select id="wkSel">${wks.map(x=>`<option value="${x.id}" ${x.id===w.id?'selected':''}>${esc(lbl(x.label).naam)} · ${esc(x.naam)}</option>`).join('')}</select><button id="copyTsv" class="small" data-tsv="${esc(tsv)}">Kopieer voor Google Sheets</button><span class="muted">Zo komt het tabblad in de gedeelde sheet; nachtelijk of via plakken.</span></div>
     <div class="grid2">
       <div class="tw"><table class="sheet"><thead><tr><th colspan="2" class="grp">Beoogde indeling CREW</th></tr><tr><th>Rol</th><th>Naam</th></tr></thead><tbody>${leftRows.map(([r,c])=>`<tr><td>${esc(fmtRol(r))}</td><td class="${c?'':'empty'}">${c?esc(user(c).naam):'nog open'}</td></tr>`).join('')}</tbody></table></div>
-      <div class="tw"><table class="sheet"><thead><tr><th colspan="5" class="grp">Beschikbare CREW (gescreend voor ${esc(lbl(w.label).naam)})</th></tr><tr><th>Naam</th><th>Vervulde functies</th><th>Goedgekeurde functies</th><th>Ervaring</th><th>Aantal keer gekozen</th></tr></thead><tbody>${av.map(c=>{const i=intakeOf(c.id,w.label);return `<tr><td class="name">${esc(c.naam)}</td><td>${esc(fmtRollen(i?.vervuld))}</td><td>${esc(fmtRollen(approvedRoles(c.id,w.label)))}</td><td>${esc(fmtErv(i?.ervaring))}</td><td class="right ${timesChosen(c.id)>MAX_OK?'over':''}">${timesChosen(c.id)}</td></tr>`;}).join('')||'<tr><td colspan="5" class="empty">Nog niemand beschikbaar én goedgekeurd.</td></tr>'}</tbody></table></div>
+      <div class="tw"><table class="sheet"><thead><tr><th colspan="5" class="grp">Beschikbare CREW (gescreend voor ${esc(lbl(w.label).naam)})</th></tr><tr><th>Naam</th><th>Vervulde functies</th><th>Kiesbare functies</th><th>Ervaring</th><th>Aantal keer gekozen</th></tr></thead><tbody>${av.map(c=>{const i=intakeOf(c.id,w.label);return `<tr><td class="name">${esc(c.naam)}</td><td>${esc(fmtRollen(i?.vervuld))}</td><td>${esc(fmtRollen(approvedRoles(c.id,w.label)))}</td><td>${esc(fmtErv(i?.ervaring))}</td><td class="right ${timesChosen(c.id)>MAX_OK?'over':''}">${timesChosen(c.id)}</td></tr>`;}).join('')||'<tr><td colspan="5" class="empty">Nog niemand beschikbaar én goedgekeurd.</td></tr>'}</tbody></table></div>
     </div>
     <p class="note" style="margin-top:12px">Geen mail/telefoon, geen opmerkingen, geen afgewezen rollen. Zelfde grid als de 2026-sheet.</p></div></section>`;
 }
@@ -831,7 +861,6 @@ document.addEventListener('click',async e=>{
     clearErr();try{if(b.dataset.ok){await db.setStatus({crew,label,rol},'goedgekeurd',me.id);toast(`${user(crew).naam} goedgekeurd: ${lbl(label).naam} · ${fmtRol(rol)}`);}
     else{const n=prompt('Reden (intern):','')??null;if(n===null)return;await db.setStatus({crew,label,rol},'afgewezen',me.id,n);toast('Afgewezen');}}catch(err){return;}
     await refresh();return;}
-  if(b.id==='bulkOk'){const todo=D.goedkeuringen.filter(g=>myLabels().includes(g.label)&&screenDoorMij(g.crew,g.label)&&g.status==='voorgesteld'&&!isPotential(g));clearErr();try{for(const g of todo)await db.setStatus(g,'goedgekeurd',me.id);}catch(err){await refresh();return;}await refresh();toast(`${todo.length} goedgekeurd`);return;}
   if(b.id==='nvAdd'){const cu=user(nvCrew.value);if(!labelsVoor(cu).some(l=>l.id===nvLabel.value)){toast(`${lbl(nvLabel.value).naam} is niet beschikbaar voor dit crewlid`);return;}const ok=await db.addVoorstel({crew:nvCrew.value,label:nvLabel.value,rol:nvRol.value,door:me.id});toast(ok?'Voorstel toegevoegd':'Bestaat al');await refresh();return;}
   if(b.id==='saveAll'){clearErr();const box=document.querySelector('.intake');if(!box)return;const val=f=>[...box.querySelectorAll(`[data-f="${f}"]:checked`)].map(x=>x.value);
     const fouten=[];
@@ -925,7 +954,7 @@ async function boot(){
   sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey);
   const {data:{session}}=await sb.auth.getSession();
   document.documentElement.setAttribute('data-brand','4M');setLogo('C58');document.getElementById('heroTitle').textContent='Inloggen';
-  if(!session){document.getElementById('userbox').hidden=true;document.getElementById('main').innerHTML=`<div class="band"></div><section class="panel login"><h2>Inloggen</h2><div class="body">
+  if(!session){document.getElementById('userbox').hidden=true;document.getElementById('heroTitle').textContent='Beschikbaarheid CREW 2027';document.getElementById('main').innerHTML=`<div class="intro">Welkom bij de crewplanning 2027 van <b>4M, 4Family, Arise, LIFE en Promo (Events)</b>. Hier geef je in vier stappen je gegevens, je inzet en je beschikbaarheid per weekend door. Daarna gaan de bewegingsleiders en projectleiders aan de slag met de planning. Invullen kan tot <b>${DEADLINE}</b>; aanpassen kan daarna nog steeds door opnieuw in te loggen.</div><div class="band"></div><section class="panel login"><h2>Inloggen</h2><div class="body">
       <p class="muted">Je krijgt een inloglink via de mail, een wachtwoord is er niet. Nieuw? Vul gewoon je mailadres in, daarmee maak je direct je account aan.</p>
       <div class="row"><label class="lab" for="email">E-mailadres</label><div class="ctl"><input type="email" id="email" placeholder="je@mail.nl" autocomplete="email"></div></div>
       <div class="tools"><button class="primary" id="sendLink">Stuur inloglink</button><span class="muted" id="loginMsg"></span></div></div></section>`;
