@@ -474,6 +474,16 @@ function scopeWeekends(){ // [{weekend, rol|null, functie}]
   });
   return out;
 }
+/* Wie mag welke plek indelen: kantoor en bewegingsleider alles; PL alles behalve EHBO en Foto/video;
+   GL alleen Spreker; FL alleen Facilitair; coördinator van een rol alleen die rol binnen zijn label(s). */
+const PL_NIET=['EHBO','Foto/video'];
+function magIndelen(w,rol){
+  if(isKantoor())return true;
+  if(isLeider()&&myLabels().includes(w.label))return true;
+  return myToew().some(t=>(t.soort==='weekend'&&t.weekend===w.id&&((t.functie==='PL'&&!PL_NIET.includes(rol))||(t.functie==='GL'&&rol==='Spreker')||(t.functie==='FL'&&rol==='Facilitair')))
+    ||(t.soort==='rol'&&t.rol===rol&&(!t.label||t.label===w.label)));
+}
+const magSlots=w=>isKantoor()||myToew().some(t=>t.soort==='weekend'&&t.weekend===w.id&&t.functie==='PL');
 const bijeenkomsten=w=>[w.startdag,w.crewmeeting,w.terugkomavond].filter(Boolean);
 /* Doelgroep van een weekend: eigen instelling (voor) of anders die van het label. */
 const wkVoor=w=>(w.voor&&w.voor.length?w.voor:(lbl(w.label)?.voor||['M','V']));
@@ -700,7 +710,7 @@ function beschikbaarLijst(w){
 }
 // indelingsblok voor één weekend: per rol links de rol, dan het aantal (uitklapvak), dan evenveel keuzevakjes met beschikbare crew
 function slotsHtml(w,editable,onlyRol,canEditSlots){
-  const ind=D.indeling[w.id]||{};
+  const ind=D.indeling[w.id]||{};const mag=r=>editable&&magIndelen(w,r);
   const used=new Set(Object.values(ind).filter(Boolean));
   const rollen=M.rollen.filter(r=>!onlyRol||r===onlyRol).filter(r=>canEditSlots||(w.slots[r]||0)>0);
   return rollen.map(rol=>{const n=w.slots[rol]||0;
@@ -708,11 +718,12 @@ function slotsHtml(w,editable,onlyRol,canEditSlots){
       const opts=crewUsers().filter(c=>wkPastBij(w,c)||ind[`${rol}#${i}`]===c.id).map(c=>{const ok=isApproved(c.id,w.label,rol),av=isAvail(c.id,w.id),busy=used.has(c.id)&&cur!==c.id;
         if(ok&&av&&!busy)return `<option value="${c.id}" ${cur===c.id?'selected':''}>${timesChosen(c.id)>MAX_OK?'⚠ ':''}${esc(c.naam)} · ${timesChosen(c.id)}x gekozen</option>`;
         if(cur===c.id)return `<option value="${c.id}" selected>${esc(c.naam)}</option>`;return null;}).filter(Boolean).join('');
-      return editable?`<span class="pick"><select data-slot="${key}" data-wk="${w.id}" class="${cur&&timesChosen(cur)>MAX_OK?'over':''}"><option value="">niet ingedeeld</option>${opts}</select>${cur&&overTxt(cur)?`<div class="overnote">${esc(overTxt(cur))}</div>`:''}</span>`
+      return mag(rol)?`<span class="pick"><select data-slot="${key}" data-wk="${w.id}" class="${cur&&timesChosen(cur)>MAX_OK?'over':''}"><option value="">niet ingedeeld</option>${opts}</select>${cur&&overTxt(cur)?`<div class="overnote">${esc(overTxt(cur))}</div>`:''}</span>`
         :`<span class="pick"><b class="${cur&&timesChosen(cur)>MAX_OK?'over':''}">${cur?esc(user(cur).naam):'nog open'}</b></span>`;};
     const blocked=n?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!isApproved(c.id,w.label,rol)&&wil(c.id,w.label).includes(rol)).map(c=>c.naam):[];
     const cnt=canEditSlots?`<select data-slotcount="${rol}" data-wk="${w.id}" title="Aantal nodig">${Array.from({length:11},(_,k)=>`<option value="${k}" ${k===n?'selected':''}>${k}</option>`).join('')}</select>`:`<span class="muted">${n}</span>`;
-    return `<div class="slotrow"><div class="r">${esc(fmtRol(rol))}</div><div class="cnt">${cnt}</div><div class="picks">${Array.from({length:n},(_,i)=>sel(i+1)).join('')}${!n&&canEditSlots?'<span class="muted" style="font-size:12px;align-self:center">niet nodig</span>':''}${blocked.length?`<div class="muted" style="font-size:12px;flex-basis:100%">Beschikbaar, nog niet gescreend voor ${esc(fmtRol(rol))}: ${blocked.map(esc).join(', ')}</div>`:''}</div></div>`;}).join('');
+    const wie=editable&&!mag(rol)?`<div class="muted" style="font-size:11px">${PL_NIET.includes(rol)?'via coördinator '+esc(fmtRol(rol)):'via PL'}</div>`:'';
+    return `<div class="slotrow"><div class="r">${esc(fmtRol(rol))}${wie}</div><div class="cnt">${cnt}</div><div class="picks">${Array.from({length:n},(_,i)=>sel(i+1)).join('')}${!n&&canEditSlots?'<span class="muted" style="font-size:12px;align-self:center">niet nodig</span>':''}${blocked.length?`<div class="muted" style="font-size:12px;flex-basis:100%">Beschikbaar, nog niet gescreend voor ${esc(fmtRol(rol))}: ${blocked.map(esc).join(', ')}</div>`:''}</div></div>`;}).join('');
 }
 
 function viewIndeling(){
@@ -735,7 +746,7 @@ function viewAanmeldingen(){
   const kies=items.length>1?`<div class="tools" style="margin-top:16px"><label for="amSel" class="muted">Jouw weekend:</label><select id="amSel">${items.map(x=>`<option value="${x.w.id}" ${x.w.id===cur.w.id?'selected':''}>${esc(lbl(x.w.label).naam)} · ${esc(x.w.naam)} (${esc(x.w.datum)}) · ${esc(fmtRollen([...x.functies]))}</option>`).join('')}</select></div>`:'';
   return kies+[cur].map(({w,rollen,alles,functies})=>{
     const rolFilter=alles?null:[...rollen];
-    const canEdit=functies.has('PL');
+    const canEdit=M.rollen.some(r=>magIndelen(w,r));const isPL=functies.has('PL');const mijnRollen=M.rollen.filter(r=>magIndelen(w,r));
     const av=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&(!rolFilter||approvedRoles(c.id,w.label).some(r=>rolFilter.includes(r))||wil(c.id,w.label).some(r=>rolFilter.includes(r))));
     const list=av.map(c=>{const i=intakeOf(c.id,w.label);const roles=approvedRoles(c.id,w.label).filter(r=>!rolFilter||rolFilter.includes(r));
       return `<tr><td class="name ${timesChosen(c.id)>MAX_OK?'over':''}" title="${esc(overTxt(c.id))}">${esc(c.naam)}${timesChosen(c.id)?` <span class="muted" style="font-weight:400">${timesChosen(c.id)}x</span>`:''}</td><td>${roles.length?esc(fmtRollen(roles)):'<span class="muted">nog niet gescreend</span>'}</td><td>${esc(fmtErv(i?.ervaring))}</td><td>${esc(i?.toelichting||'')}</td></tr>`;}).join('');
@@ -743,7 +754,7 @@ function viewAanmeldingen(){
       ${letOp(w)?`<p class="muted">${letOp(w)}</p>`:''}
       ${zonderRollen(w.label)?beschikbaarLijst(w):`<h3 style="margin-top:8px">Beschikbaar</h3>
       <div class="tw"><table><thead><tr><th>Naam</th><th>Gescreende rollen</th><th>Ervaring</th><th>Opmerkingen</th></tr></thead><tbody>${list||'<tr><td colspan="4" class="muted">Nog niemand beschikbaar.</td></tr>'}</tbody></table></div>`}
-      ${zonderRollen(w.label)||(rolFilter&&!canEdit)?'':`<h3 style="margin-top:16px">${canEdit?'Indeling (jij bent PL): kies per rol hoeveel je nodig hebt en wie':'Indeling'}</h3><div>${slotsHtml(w,canEdit,rolFilter&&rolFilter.length===1?rolFilter[0]:null,canEdit)}</div>${canEdit?exportKnop(w):''}`}
+      ${zonderRollen(w.label)?'':`<h3 style="margin-top:16px">${isPL?'Indeling (jij bent PL): kies per rol hoeveel je nodig hebt en wie':canEdit?`Indeling: jij deelt ${esc(fmtRollen(mijnRollen))} in`:'Indeling'}</h3><div>${slotsHtml(w,canEdit,rolFilter&&rolFilter.length===1?rolFilter[0]:null,magSlots(w))}</div>${isPL?exportKnop(w):''}`}
     </div></section>`;
   }).join('');
 }
@@ -791,7 +802,7 @@ function viewWeekenden(){
   </form>`;
   const flt=UI.wkLabel&&lbl(UI.wkLabel)?UI.wkLabel:'';
   const filterBar=`<div class="tools" style="margin-top:16px"><label for="wkLabelSel" class="muted">Label:</label><select id="wkLabelSel"><option value="">Alle labels (${D.weekends.length})</option>${M.labels.map(l=>`<option value="${l.id}" ${flt===l.id?'selected':''}>${esc(l.naam)} (${D.weekends.filter(w=>w.label===l.id).length})</option>`).join('')}</select></div>`;
-  const blocks=[...D.weekends].filter(w=>!flt||w.label===flt).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>`<div class="band"></div><section class="panel"><h2>${esc(w.naam)} <span class="tag lbl">${esc(lbl(w.label)?.naam||w.label)}</span>${w.voor&&w.voor.length?` <span class="tag">${fmtVoor(w)}</span>`:''}</h2><div class="body">${form(w,false)}</div></section>`).join('');
+  const blocks=[...D.weekends].filter(w=>!flt||w.label===flt).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>`<div class="band"></div><section class="panel"><h2>${esc(w.naam)} <span class="tag lbl">${esc(lbl(w.label)?.naam||w.label)}</span>${w.voor&&w.voor.length?` <span class="tag">${fmtVoor(w)}</span>`:''} <span class="muted" style="font-size:12px;font-weight:400;text-transform:none;letter-spacing:0">id: ${esc(w.id)}${w.start_datum?'':' · geen startdatum, staat bovenaan'}</span></h2><div class="body">${form(w,false)}</div></section>`).join('');
   return `${filterBar}<p class="note" style="margin-top:12px">Wat je hier invult, ziet de vrijwilliger bij het weekend onder Mijn beschikbaarheid: startdag, crewmeeting en terugkomavond horen bij het weekend. Opmerking voor crew komt als LET OP bij het weekend te staan. Plekken per rol bepalen het indelingsgrid. "Crew: voor wie" beperkt wie het weekend ziet en ingedeeld kan worden (bijv. 4Family-weekenden waar alleen mannen crew zijn).</p>${blocks}
     <div class="band"></div><section class="panel"><h2>Nieuw weekend</h2><div class="body">${form({naam:'',label:flt||M.labels[0].id,datum:'',slots:{}},true)}</div></section>`;
 }
@@ -999,7 +1010,8 @@ document.addEventListener('submit',async e=>{
     const id=f.dataset.id||(fd.get('id')||'').trim().toLowerCase().replace(/[^a-z0-9-]/g,'-');if(!id){toast('ID ontbreekt');return;}
     if(!f.dataset.id&&wk(id)){toast('ID bestaat al');return;}
     const voorV=fd.get('voor')||'';await db.saveWeekend({id,naam:fd.get('naam').trim(),label:fd.get('label'),voor:voorV?voorV.split(''):null,datum:fd.get('datum').trim(),start_datum:fd.get('start_datum').trim()||null,slots,startdag:fd.get('startdag').trim(),crewmeeting:fd.get('crewmeeting').trim(),terugkomavond:fd.get('terugkomavond').trim(),opmerking:(fd.get('opmerking')||'').trim(),sheet_url:(fd.get('sheet_url')||'').trim()||null});
-    await refresh();toast('Weekend opgeslagen');return;}
+    if(!f.dataset.id&&UI.wkLabel&&UI.wkLabel!==fd.get('label'))UI.wkLabel=fd.get('label');
+    await refresh();toast(`Weekend opgeslagen: ${fd.get('naam').trim()} (${lbl(fd.get('label'))?.naam||fd.get('label')})`,3500);return;}
   if(f.id==='twForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={user:fd.get('user'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
     await db.addToewijzing(t);await refresh();toast('Toegewezen');return;}
