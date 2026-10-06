@@ -194,6 +194,7 @@ tr:last-child td{border-bottom:0}
 .rolgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px 10px;font-size:13px}
 .rolgrid label{display:flex;gap:6px;align-items:center;cursor:pointer}
 .field{margin-block:8px;display:block}
+.field[hidden]{display:none}
 .field input,.field select{width:100%}
 .wkform .tools{align-items:flex-end}
 .field>span{display:block;font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;font-size:12px;color:var(--muted);margin-bottom:3px}
@@ -818,7 +819,7 @@ function viewToewijzingen(){
       <label class="field"><span>Geldt voor</span><select name="soort" id="twSoort"><option value="weekend">één weekend</option><option value="label">heel label</option><option value="rol">een rol</option></select></label>
       <label class="field" data-for="weekend"><span>Weekend</span><select name="weekend">${[...D.weekends].sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>`<option value="${w.id}">${esc(lbl(w.label)?.naam)} · ${esc(w.naam)}</option>`).join('')}</select></label>
       <label class="field" data-for="label rol" hidden><span>Label</span><select name="label"><option value="">alle labels</option>${M.labels.map(l=>`<option value="${l.id}">${esc(l.naam)}</option>`).join('')}</select></label>
-      <label class="field" data-for="rol" hidden><span>Rol</span><select name="rol">${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select></label>
+      <label class="field" data-for="rol" hidden><span>Rol (coördinator)</span><select name="rol">${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select></label>
       <button class="primary small" type="submit">Toewijzen</button>
     </form>
     <div class="tw" style="margin-top:12px"><table><thead><tr><th>Persoon</th><th>Functie</th><th>Ziet</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="muted">Nog geen toewijzingen.</td></tr>'}</tbody></table></div>
