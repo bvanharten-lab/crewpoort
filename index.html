@@ -450,7 +450,8 @@ const screenDoorMij=(cid,l)=>isKantoor()||leiderVoor(l,user(cid)?.geslacht)===me
 const myLabels=()=>isKantoor()?M.labels.map(l=>l.id):isLeider()?M.labels.filter(l=>l.leider_m===me.id||l.leider_v===me.id).map(l=>l.id):[];
 const screenLabels=()=>myLabels().filter(l=>!zonderRollen(l));
 const medischVan=c=>(D.medisch||[]).find(m=>m.crew===c);
-const medischBekend=c=>!!medischVan(c)?.ingevuld;
+/* Bekend = ingevuld én er is een ICE-telefoonnummer; anders krijgt het crewlid stap 2 alsnog, voorgevuld met wat we al hebben. */
+const medischBekend=c=>{const m=medischVan(c);return !!m&&!!m.ingevuld&&!!(m.ice_telefoon||'').trim();};
 const intakeOf=(c,l)=>D.intake.find(i=>i.crew===c&&i.label===l);
 const G=(c,l)=>D.goedkeuringen.filter(g=>g.crew===c&&(!l||g.label===l));
 /* Gescreend (goedgekeurd) ongeacht wens. Vervulde functies worden automatisch goedgekeurd; de leider kan alleen afkeuren. */
@@ -603,7 +604,7 @@ const locked=k=>isCrew()&&FASE_STEP[k]!==undefined&&FASE_STEP[k]>fase();
 function viewMedisch(){
   const m=medischVan(me.id)||{};
   const yn=(n,v)=>`<label><input type="radio" name="${n}" value="ja" ${v===true?'checked':''}> Ja</label> <label style="margin-left:14px"><input type="radio" name="${n}" value="nee" ${v===false?'checked':''}> Nee</label>`;
-  return `<p class="note" style="margin-top:24px">Deze gegevens zijn alleen zichtbaar voor jou en kantoor. Ze gaan nooit mee in lijsten of exports naar anderen. ${m.ingevuld?'We hebben dit al van je; controleer en pas aan waar nodig.':''}</p>
+  return `<p class="note" style="margin-top:24px">Deze gegevens zijn alleen zichtbaar voor jou en kantoor. Ze gaan nooit mee in lijsten of exports naar anderen. ${m.ingevuld&&medischBekend(me.id)?'We hebben dit al van je; controleer en pas aan waar nodig.':m.crew?'Een deel hebben we al van je; vul aan wat ontbreekt (in elk geval het telefoonnummer van je contactpersoon).':''}</p>
   <form id="medischForm" novalidate><div class="band"></div><section class="panel"><h2>Stap 2: medische gegevens</h2><div class="body">
     <div class="row"><div class="lab">Zijn er medische gegevens waar we rekening mee moeten houden?</div><div class="ctl">${yn('medisch',m.medisch)}</div></div>
     <div class="row"><div class="lab">Toelichting medische gegevens</div><div class="help">Bijv. medicijngebruik, aandoeningen, beperkingen.</div><div class="ctl"><textarea name="medisch_toelichting">${esc(m.medisch_toelichting||'')}</textarea></div></div>
