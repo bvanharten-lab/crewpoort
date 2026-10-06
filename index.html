@@ -39,13 +39,37 @@
 @media (prefers-color-scheme:dark){:root[data-brand="4M"]:not([data-theme="light"]){--bg:#000000;--panel:#111111;--panel2:#1f1f1f;--line:#777777;--ink:#ffffff;--muted:#a8a8a8;--hero:#000000;--hero-ink:#ffffff;--logo:#dd0000;--logo-ink:#ffffff;--sand:#2a2a2a;--sand-ink:#ffffff;--field:#1f1f1f;--accent:#ff1a1a;--accent-ink:#ffffff;--accent-soft:#3a0e0e;--pot:#ffffff;--pot-soft:#2a2a2a;}}
 :root[data-brand="4M"][data-theme="dark"]{--bg:#000000;--panel:#111111;--panel2:#1f1f1f;--line:#777777;--ink:#ffffff;--muted:#a8a8a8;--hero:#000000;--hero-ink:#ffffff;--logo:#dd0000;--logo-ink:#ffffff;--sand:#2a2a2a;--sand-ink:#ffffff;--field:#1f1f1f;--accent:#ff1a1a;--accent-ink:#ffffff;--accent-soft:#3a0e0e;--pot:#ffffff;--pot-soft:#2a2a2a;}
 /* Arise — Playfair Display (koppen), Lato (tekst), bordeaux #6A3C3F en goud #A99F71 */
-:root[data-brand="AR"]{--bg:#ffffff;--panel:#ffffff;--panel2:#f3eee6;--line:#6a3c3f;--ink:#2a2224;--muted:#6a5c5e;--hero:#6a3c3f;--hero-ink:#ffffff;--logo:#a99f71;--logo-ink:#ffffff;--sand:#a99f71;--sand-ink:#ffffff;--field:#f3eee6;
-  --accent:#6a3c3f;--accent-ink:#ffffff;--accent-soft:#eadfdf;--gold:#a99f71;--pot:#7d7449;--pot-soft:#ecE8d8;
+:root[data-brand="AR"]{--bg:#fcfaf7;--panel:#ffffff;--panel2:#f7f3ee;--line:#6a3c3f;--ink:#3a3032;--muted:#8a7c7e;--hero:#fcfaf7;--hero-ink:#5a3f42;--logo:#a99f71;--logo-ink:#ffffff;--sand:#a99f71;--sand-ink:#ffffff;--field:#ffffff;--border:#e6ddd2;
+  --accent:#6a3c3f;--accent-ink:#ffffff;--accent-soft:#f5ecea;--gold:#c2b996;--pot:#7d7449;--pot-soft:#ecE8d8;--border:#ece5dc;--shadow:0 1px 2px rgba(74,46,49,.04),0 6px 20px rgba(74,46,49,.05);
   --display:"Playfair Display",Georgia,serif;--body:"Lato","IBM Plex Sans",system-ui,sans-serif;}
-:root[data-brand="AR"] h1,:root[data-brand="AR"] h2{text-transform:none;letter-spacing:0;font-weight:700}
-:root[data-brand="AR"] h3,:root[data-brand="AR"] th,:root[data-brand="AR"] .stat .l,:root[data-brand="AR"] .field>span,:root[data-brand="AR"] .tag,:root[data-brand="AR"] .who label,:root[data-brand="AR"] .slot .r{font-family:var(--body);font-weight:700}
+:root[data-brand="AR"] h1,:root[data-brand="AR"] h2{text-transform:none;letter-spacing:0;font-weight:600}
+:root[data-brand="AR"] h1{font-weight:400;font-size:clamp(30px,4.5vw,44px);color:var(--accent);font-style:italic}
+:root[data-brand="AR"] .hero h1:after{height:2px;width:72px;background:var(--gold)}
+:root[data-brand="AR"] .hero .sub{opacity:.8;color:var(--hero-ink)}
+:root[data-brand="AR"] .site{border-bottom:0}
+:root[data-brand="AR"] .hero .in{padding-top:12px;padding-bottom:44px}
+:root[data-brand="AR"] .logo{background:transparent;padding:0}
+:root[data-brand="AR"] .steps button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--hero-ink);opacity:.65;font-weight:700;letter-spacing:.06em;font-size:12px}
+:root[data-brand="AR"] .steps button.on{opacity:1;border-bottom-color:var(--accent);border-bottom-width:2px}
+:root[data-brand="AR"] .who select,:root[data-brand="AR"] .who button{background:var(--panel);color:var(--ink);border-color:var(--border)}
+:root[data-brand="AR"] .who label{color:var(--hero-ink)}
+:root[data-brand="AR"] .panel{border-top:0;border:1px solid var(--border);box-shadow:none;padding-top:18px}
+:root[data-brand="AR"] .panel>h2{font-size:21px;color:var(--accent);font-weight:500}
+:root[data-brand="AR"] .userbox .t{text-transform:none;font-weight:600;font-size:20px}
+:root[data-brand="AR"] .userbox .t,:root[data-brand="AR"] .intro b{color:var(--accent)}
+:root[data-brand="AR"] button{border-width:1px;border-color:var(--accent);color:var(--accent);background:transparent;letter-spacing:.08em;border-radius:2px}
+:root[data-brand="AR"] button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+:root[data-brand="AR"] .row .lab{font-weight:600}
+:root[data-brand="AR"] .row{border-bottom-color:var(--panel2)}
+:root[data-brand="AR"] button.small{border-color:var(--border);color:var(--ink)}
+:root[data-brand="AR"] .note{border-left-color:var(--gold);background:var(--panel2)}
+:root[data-brand="AR"] th{border-bottom:1px solid var(--gold);color:var(--muted)}
+:root[data-brand="AR"] .stat{background:var(--panel2)}
+:root[data-brand="AR"] .sw input:checked+i{background:var(--accent)}
+:root[data-brand="AR"] .userbox,:root[data-brand="AR"] .intro{border:1px solid var(--border);box-shadow:none}
+:root[data-brand="AR"] h3,:root[data-brand="AR"] th,:root[data-brand="AR"] .stat .l,:root[data-brand="AR"] .field>span,:root[data-brand="AR"] .tag,:root[data-brand="AR"] .who label,:root[data-brand="AR"] .slot .r,:root[data-brand="AR"] .slotrow .r{font-family:var(--body);font-weight:700;letter-spacing:.08em;font-size:12px}
 :root[data-brand="AR"] .steps button{font-family:var(--body)}
-:root[data-brand="AR"] .tag.lbl{background:var(--gold);color:#fff}
+:root[data-brand="AR"] .tag.lbl{background:var(--accent-soft);color:var(--accent)}
 @media (prefers-color-scheme:dark){:root[data-brand="AR"]:not([data-theme="light"]){--bg:#1b1617;--panel:#251e20;--panel2:#31292b;--line:#8a6f72;--ink:#efe9e6;--muted:#aa9c9a;--hero:#3f2325;--hero-ink:#ffffff;--logo:#a99f71;--logo-ink:#1b1617;--sand:#a99f71;--sand-ink:#1b1617;--field:#31292b;--accent:#b9777b;--accent-ink:#1b1617;--accent-soft:#3f2a2c;--gold:#c2b78a;--pot:#c2b78a;--pot-soft:#332f22;}}
 :root[data-brand="AR"][data-theme="dark"]{--bg:#1b1617;--panel:#251e20;--panel2:#31292b;--line:#8a6f72;--ink:#efe9e6;--muted:#aa9c9a;--hero:#3f2325;--hero-ink:#ffffff;--logo:#a99f71;--logo-ink:#1b1617;--sand:#a99f71;--sand-ink:#1b1617;--field:#31292b;--accent:#b9777b;--accent-ink:#1b1617;--accent-soft:#3f2a2c;--gold:#c2b78a;--pot:#c2b78a;--pot-soft:#332f22;}
 /* LIFE — lifenetwerk.nl: Big Shoulders Display 800 (koppen), Epilogue (tekst), zwart, rood #DD0000, donkerblauw #0D3E5D, lichtgrijs #F0F0F0 */
