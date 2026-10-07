@@ -7,7 +7,6 @@
 <script src="config.js"></script>
 </head>
 <body>
-
 <title>CREW Poort 2027</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=Big+Shoulders+Display:wght@600;700;800&family=Epilogue:wght@400;500;600&family=Playfair+Display:wght@600;700&family=Lato:wght@400;700&display=swap">
 <style>
@@ -367,7 +366,7 @@ function LocalStore(){
     set('c4','AR','PL','goedgekeurd','u_nadine');set('c4','AR','GL','goedgekeurd','u_nadine');
     set('c9','LI','PL','goedgekeurd','u_auke');set('c7','4M','EHBO','goedgekeurd','u_wouter');
     const beschikbaar={c5:['w1','w2','w4','w6'],c1:['w1','w2','w5'],c4:['w9','w10'],c9:['w11','w12','w2'],c7:['w1','w2'],c13:['w1','w4'],c3:['w1','w2','w4'],c10:['w6','w8'],c6:['w9','w6']};
-    return {intake:JSON.parse(JSON.stringify(DEMO.intake)),goedkeuringen,beschikbaar,indeling:{},weekends:JSON.parse(JSON.stringify(DEMO.weekends)),toewijzingen:JSON.parse(JSON.stringify(DEMO.toewijzingen)),medisch:JSON.parse(JSON.stringify(DEMO.medisch)),pending:[]};
+    return {intake:JSON.parse(JSON.stringify(DEMO.intake)),goedkeuringen,beschikbaar,indeling:{},weekends:JSON.parse(JSON.stringify(DEMO.weekends)),toewijzingen:JSON.parse(JSON.stringify(DEMO.toewijzingen)),medisch:JSON.parse(JSON.stringify(DEMO.medisch)),pending:[],twPending:[]};
   };
   try{S=JSON.parse(localStorage.getItem(KEY))||seed();}catch(e){S=seed();}
   const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}};
@@ -396,6 +395,8 @@ function LocalStore(){
     async setRollen(id,rollen){const u=DEMO.users.find(x=>x.id===id);u.rollen=rollen;u.rol=rollen.includes('kantoor')?'kantoor':rollen.includes('leider')?'leider':'crew';},
     async setLeider(label,veld,userId){const l=DEMO.labels.find(x=>x.id===label);l[veld]=userId||null;},
     async deleteToewijzing(id){S.toewijzingen=S.toewijzingen.filter(t=>t.id!==id);save();},
+    async addToewijzingPending(t){(S.twPending=S.twPending||[]).push(t);save();},
+    async deleteToewijzingPending(t){S.twPending=(S.twPending||[]).filter(x=>JSON.stringify(x)!==JSON.stringify(t));save();},
     reset(){S=seed();save();},
   };
 }
@@ -414,7 +415,7 @@ function SupabaseStore(client){
       return {labels,rollen:rollen.map(r=>r.id),users};
     },
     async load(){
-      const [intake,goedkeuringen,besch,ind,weekends,toewijzingen,medisch,pending]=await Promise.all([
+      const [intake,goedkeuringen,besch,ind,weekends,toewijzingen,medisch,pending,twPending]=await Promise.all([
         one(client.from('intake').select('crew,label,ervaring,vervuld,voorkeur,toelichting')),
         one(client.from('goedkeuringen').select('crew,label,rol,status,bron,door,datum,notitie')),
         one(client.from('beschikbaarheid').select('crew,weekend')),
@@ -423,11 +424,12 @@ function SupabaseStore(client){
         one(client.from('toewijzingen').select('id,user,functie,soort,weekend,label,rol')),
         one(client.from('medisch').select('crew,medisch,medisch_toelichting,allergie,allergie_toelichting,ice_naam,ice_telefoon,ice_relatie,ingevuld')),
         client.from('profiles_pending').select('email,naam,rol,rollen,geslacht').then(r=>r.data||[]),
+        client.from('toewijzingen_pending').select('email,functie,soort,weekend,label,rol').then(r=>r.data||[]),
       ]);
       const beschikbaar={};besch.forEach(b=>(beschikbaar[b.crew]=beschikbaar[b.crew]||[]).push(b.weekend));
       const indeling={};ind.forEach(i=>(indeling[i.weekend]=indeling[i.weekend]||{})[`${i.rol}#${i.plek}`]=i.crew);
       let verdeling=null;try{const {data}=await client.rpc('verdeling_overzicht');if(Array.isArray(data))verdeling=data;}catch(e){}
-      return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,verdeling};
+      return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,twPending,verdeling};
     },
     async loadUsers(){const {data}=await client.from('profiles').select('id,naam,rol,rollen,geslacht,email,telefoon');return data||null;},
     async saveIntake(i){await one(client.from('intake').upsert(i,{onConflict:'crew,label'}));await one(client.rpc('stel_voor_uit_intake',{p_crew:i.crew,p_label:i.label}));},
@@ -448,6 +450,8 @@ function SupabaseStore(client){
     async deletePending(email){await one(client.from('profiles_pending').delete().eq('email',email));},
     async setRollen(id,rollen){await one(client.rpc('zet_rollen',{p_user:id,p_rollen:rollen}));},
     async deleteToewijzing(id){await one(client.from('toewijzingen').delete().eq('id',id));},
+    async addToewijzingPending(t){await one(client.from('toewijzingen_pending').insert({...t,email:t.email.toLowerCase()}));},
+    async deleteToewijzingPending(t){let q=client.from('toewijzingen_pending').delete().match({email:t.email,functie:t.functie,soort:t.soort});for(const k of ['weekend','label','rol'])q=t[k]?q.eq(k,t[k]):q.is(k,null);await one(q);},
     reset(){},
   };
 }
@@ -837,6 +841,22 @@ function viewWeekenden(){
 function viewToewijzingen(){
   const soortTxt=t=>t.soort==='weekend'?`weekend ${esc(wk(t.weekend)?.naam||t.weekend)}`:t.soort==='label'?`heel label ${esc(lbl(t.label)?.naam||t.label)}`:`rol ${esc(fmtRol(t.rol))}${t.label?' bij '+esc(lbl(t.label)?.naam):' bij alle labels'}`;
   const rows=D.toewijzingen.map(t=>`<tr><td class="name">${esc(user(t.user)?.naam||t.user)}</td><td>${esc(fmtRol(t.functie))}</td><td>${soortTxt(t)}</td><td><button class="small" data-deltw="${esc(t.id)}">Verwijder</button></td></tr>`).join('');
+  const pendProfiles=[...(D.pending||[])].sort((a,b)=>(a.naam||'').localeCompare(b.naam||''));
+  const twp=(D.twPending||[]);
+  const pendNaam=em=>pendProfiles.find(p=>p.email===em)?.naam||em;
+  const pendRows=`<details style="margin-top:18px" ${twp.length||pendProfiles.length?'open':''}><summary><b>Vooraf toewijzen</b> <span class="muted">(klaargezette profielen die nog niet ingelogd hebben · ${twp.length})</span></summary>
+    <p class="muted" style="margin-top:8px">Kies iemand uit Crewbeheer → klaargezet. De toewijzing wordt bij de eerste login automatisch echt. Staat iemand hier niet bij? Zet dan eerst het profiel klaar onder Crewbeheer.</p>
+    ${pendProfiles.length?`<form id="twPendForm" class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end">
+      <label class="field"><span>Klaargezet profiel</span><select name="email">${pendProfiles.map(p=>`<option value="${esc(p.email)}">${esc(p.naam||p.email)}</option>`).join('')}</select></label>
+      <label class="field"><span>Functie</span><select name="functie">${FUNCTIES.map(f=>`<option value="${f}">${fmtRol(f)}</option>`).join('')}</select></label>
+      <label class="field"><span>Geldt voor</span><select name="soort" id="twPendSoort"><option value="weekend">één weekend</option><option value="label">heel label</option><option value="rol">een rol</option></select></label>
+      <label class="field" data-for="weekend"><span>Weekend</span><select name="weekend">${[...D.weekends].sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>`<option value="${w.id}">${esc(lbl(w.label)?.naam)} · ${esc(w.naam)}</option>`).join('')}</select></label>
+      <label class="field" data-for="label rol" hidden><span>Label</span><select name="label"><option value="">alle labels</option>${M.labels.map(l=>`<option value="${l.id}">${esc(l.naam)}</option>`).join('')}</select></label>
+      <label class="field" data-for="rol" hidden><span>Rol (coördinator)</span><select name="rol">${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select></label>
+      <button class="primary small" type="submit">Vooraf toewijzen</button>
+    </form>`:'<p class="muted">Geen klaargezette profielen.</p>'}
+    ${twp.length?`<div class="tw" style="margin-top:12px"><table><thead><tr><th>Persoon</th><th>Functie</th><th>Ziet (na eerste login)</th><th></th></tr></thead><tbody>${twp.map((t,i)=>`<tr><td class="name">${esc(pendNaam(t.email))}${pendProfiles.some(p=>p.email===t.email)?'':' <span class="muted">(geen klaargezet profiel)</span>'}</td><td>${esc(fmtRol(t.functie))}</td><td>${soortTxt(t)}</td><td><button class="small" data-deltwp="${i}">Verwijder</button></td></tr>`).join('')}</tbody></table></div>`:''}
+  </details>`;
   return `<div class="band"></div><section class="panel"><h2>Toewijzingen</h2><div class="body">
     <p class="muted">Wie mag welke aanmeldingen zien? Een PL van een weekend ziet de beschikbare crew van dat weekend en deelt in. Een coördinator van een rol (bv. EHBO bij 4M en LIFE, Foto/video bij alle labels) ziet alle aanmeldingen voor die rol binnen die labels. Bewegingsleiders staan niet hier maar bij de labels.</p>
     <form id="twForm" class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end">
@@ -849,6 +869,7 @@ function viewToewijzingen(){
       <button class="primary small" type="submit">Toewijzen</button>
     </form>
     <div class="tw" style="margin-top:12px"><table><thead><tr><th>Persoon</th><th>Functie</th><th>Ziet</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="muted">Nog geen toewijzingen.</td></tr>'}</tbody></table></div>
+    ${pendRows}
     <p class="note" style="margin-top:12px">Bewegingsleiders per label: ${M.labels.map(l=>`${esc(l.naam)}: ${[l.leider_m?'mannen → '+esc(user(l.leider_m)?.naam):null,l.leider_v?'vrouwen → '+esc(user(l.leider_v)?.naam):null].filter(Boolean).join(', ')||'geen screening'}`).join(' · ')}. Aanpassen: tabel <code>labels</code> (leider_m / leider_v).</p>
   </div></section>`;
 }
@@ -1004,6 +1025,7 @@ document.addEventListener('click',async e=>{
   if(b.dataset.delpend){await db.deletePending(b.dataset.delpend);await refresh();return;}
   if(b.dataset.rollen){const u=user(b.dataset.rollen);const cur=rollenVan(u).join(',');const inp=prompt('Rollen voor '+u.naam+' (komma-gescheiden: crew, leider, kantoor):',cur);if(inp===null)return;const rollen=inp.split(',').map(x=>x.trim().toLowerCase()).filter(x=>['crew','leider','kantoor'].includes(x));if(!rollen.length){toast('Geen geldige rol');return;}await db.setRollen(u.id,rollen);u.rollen=rollen;await refresh();toast('Rollen bijgewerkt');return;}
   if(b.dataset.deltw){await db.deleteToewijzing(b.dataset.deltw);await refresh();toast('Toewijzing verwijderd');return;}
+  if(b.dataset.deltwp){const t=(D.twPending||[])[+b.dataset.deltwp];if(t){await db.deleteToewijzingPending(t);await refresh();toast('Vooraf-toewijzing verwijderd');}return;}
 });
 document.addEventListener('submit',async e=>{
   const f=e.target;e.preventDefault();clearErr();
@@ -1042,6 +1064,10 @@ document.addEventListener('submit',async e=>{
   if(f.id==='twForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={user:fd.get('user'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
     await db.addToewijzing(t);await refresh();toast('Toegewezen');return;}
+  if(f.id==='twPendForm'){const fd=new FormData(f);const soort=fd.get('soort');
+    const t={email:fd.get('email'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
+    if((D.twPending||[]).some(x=>['email','functie','soort','weekend','label','rol'].every(k=>(x[k]||null)===(t[k]||null)))){toast('Deze toewijzing staat er al');return;}
+    await db.addToewijzingPending(t);await refresh();toast('Vooraf toegewezen; wordt actief bij eerste login');return;}
 });
 document.addEventListener('change',async e=>{
   const t=e.target;
@@ -1052,7 +1078,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='wkLabelSel'){UI.wkLabel=t.value;render();return;}
   if(t.dataset.leider){clearErr();try{await db.setLeider(t.dataset.leider,t.dataset.veld,t.value);}catch(err){return;}M=await db.init();me=M.users.find(u=>u.id===me.id)||me;await refresh();toast('Bewegingsleider opgeslagen');return;}
   if(t.id==='ervSel'){const nieuw=t.value==='nieuw';const tab=document.querySelector('.roltab');tab.classList.toggle('nieuw',nieuw);if(nieuw)tab.querySelectorAll('input[data-f=vervuld]').forEach(x=>x.checked=false);document.getElementById('rolHelp').textContent=nieuw?'Je bent nog niet mee geweest, dus geef alleen aan wat je in 2027 graag zou doen.':'Links: wat je al gedaan hebt. Rechts: wat je in 2027 graag zou doen.';return;}
-  if(t.id==='twSoort'){document.querySelectorAll('#twForm [data-for]').forEach(el=>el.hidden=!el.dataset.for.split(' ').includes(t.value));return;}
+  if(t.id==='twSoort'||t.id==='twPendSoort'){t.closest('form').querySelectorAll('[data-for]').forEach(el=>el.hidden=!el.dataset.for.split(' ').includes(t.value));return;}
   if(t.dataset.av){const on=t.checked;try{await db.setAvail(t.dataset.crew,t.dataset.av,on);}catch(err){t.checked=!on;return;}D=await db.load();
     const h=document.querySelector(`[data-avhelp="${t.dataset.av}"]`);if(h){const w=wk(t.dataset.av);const keep=h.querySelector('.avst')?.outerHTML||'';h.innerHTML=(on?letOp(w):'')+keep;}return;}
   if(t.dataset.slot){await db.setSlot(t.dataset.wk||UI.weekendView,t.dataset.slot,t.value);await refresh();return;}
@@ -1089,7 +1115,4 @@ async function boot(){
 }
 boot();
 </script>
-
-
-</body>
-</html>
+</body></html>
