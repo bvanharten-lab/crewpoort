@@ -1115,9 +1115,14 @@ async function boot(){
       document.getElementById('loginMsg').textContent=error?'Lukt niet: '+error.message:'Link verstuurd. Check je mail (ook spam).';};
     document.getElementById('sendLink').onclick=send;document.getElementById('email').addEventListener('keydown',e=>{if(e.key==='Enter')send();});return;}
   document.getElementById('userbox').hidden=false;
-  db=SupabaseStore(sb);M=await db.init();
+  db=SupabaseStore(sb);
+  // Zelfherstel: profiel aanmaken als dat ontbreekt, klaargezette medische gegevens en toewijzingen overnemen.
+  let koppel=null;try{const {data,error}=await sb.rpc('koppel_mij');koppel=error?{fout:error.message}:data;}catch(e){koppel={fout:String(e)};}
+  M=await db.init();
   me=user(session.user.id);
-  if(!me){document.getElementById('userbox').hidden=true;document.getElementById('main').innerHTML=`<div class="band"></div><section class="panel login"><h2>Geen profiel</h2><div class="body"><p class="muted">Je bent ingelogd als ${esc(session.user.email)}, maar dit adres staat nog niet in de lijst van kantoor. Vraag kantoor om je toe te voegen en log daarna opnieuw in.</p><div class="tools"><button id="logout">Uitloggen</button></div></div></section>`;return;}
+  if(!me){document.getElementById('userbox').hidden=true;
+    const dicht=koppel&&koppel.fout==='gesloten';
+    document.getElementById('main').innerHTML=`<div class="band"></div><section class="panel login"><h2>${dicht?'Nog niet aangemeld':'Profiel kon niet worden aangemaakt'}</h2><div class="body"><p class="muted">Je bent ingelogd als ${esc(session.user.email)}. ${dicht?'De aanmelding is op dit moment gesloten en dit adres staat nog niet in de lijst van kantoor. Vraag kantoor om je toe te voegen en log daarna opnieuw in.':'Er ging iets mis bij het aanmaken van je profiel. Probeer het over een minuut opnieuw; blijft dit zo, mail dan contact@4m.nl met deze melding: '+esc(koppel&&koppel.fout||'onbekend')+'.'}</p><div class="tools"><button id="logout">Uitloggen</button></div></div></section>`;return;}
   await refresh();
 }
 boot();
