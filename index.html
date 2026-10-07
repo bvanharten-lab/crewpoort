@@ -429,6 +429,7 @@ function SupabaseStore(client){
       let verdeling=null;try{const {data}=await client.rpc('verdeling_overzicht');if(Array.isArray(data))verdeling=data;}catch(e){}
       return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,verdeling};
     },
+    async loadUsers(){const {data}=await client.from('profiles').select('id,naam,rol,rollen,geslacht,email,telefoon');return data||null;},
     async saveIntake(i){await one(client.from('intake').upsert(i,{onConflict:'crew,label'}));await one(client.rpc('stel_voor_uit_intake',{p_crew:i.crew,p_label:i.label}));},
     async deleteIntake(crew,label){await one(client.from('intake').delete().match({crew,label}));},
     async setStatus(g,status,door,notitie=''){const rows=await one(client.from('goedkeuringen').update({status,door,notitie,datum:today()}).match({crew:g.crew,label:g.label,rol:g.rol}).select('crew'));
@@ -839,7 +840,7 @@ function viewToewijzingen(){
   return `<div class="band"></div><section class="panel"><h2>Toewijzingen</h2><div class="body">
     <p class="muted">Wie mag welke aanmeldingen zien? Een PL van een weekend ziet de beschikbare crew van dat weekend en deelt in. Een coördinator van een rol (bv. EHBO bij 4M en LIFE, Foto/video bij alle labels) ziet alle aanmeldingen voor die rol binnen die labels. Bewegingsleiders staan niet hier maar bij de labels.</p>
     <form id="twForm" class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end">
-      <label class="field"><span>Persoon</span><select name="user">${M.users.filter(u=>u.rol!=='kantoor').map(u=>`<option value="${u.id}">${esc(u.naam)}</option>`).join('')}</select></label>
+      <label class="field"><span>Persoon</span><select name="user">${[...crewUsers()].sort((a,b)=>(a.naam||'').localeCompare(b.naam||'')).map(u=>`<option value="${u.id}">${esc(u.naam||u.email||u.id)}${rollenVan(u).some(r=>r!=='crew')?' ('+rollenVan(u).filter(r=>r!=='crew').join('/')+')':''}</option>`).join('')}</select></label>
       <label class="field"><span>Functie</span><select name="functie">${FUNCTIES.map(f=>`<option value="${f}">${fmtRol(f)}</option>`).join('')}</select></label>
       <label class="field"><span>Geldt voor</span><select name="soort" id="twSoort"><option value="weekend">één weekend</option><option value="label">heel label</option><option value="rol">een rol</option></select></label>
       <label class="field" data-for="weekend"><span>Weekend</span><select name="weekend">${[...D.weekends].sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>`<option value="${w.id}">${esc(lbl(w.label)?.naam)} · ${esc(w.naam)}</option>`).join('')}</select></label>
@@ -953,7 +954,7 @@ async function render(){
   if(UI.lastStep!==UI.step){UI.lastStep=UI.step;window.scrollTo({top:0,left:0,behavior:'auto'});}
   try{localStorage.setItem('crewpoort-ui',JSON.stringify({step:UI.step,who:me.id}));}catch(e){}
 }
-async function refresh(){D=await db.load();await render();}
+async function refresh(){D=await db.load();if(db.loadUsers){const us=await db.loadUsers();if(us){M.users=us;const m2=us.find(u=>u.id===me.id);if(m2)me=m2;}}await render();}
 
 /* ---------- Events ---------- */
 document.addEventListener('click',async e=>{
