@@ -706,7 +706,7 @@ function viewProfiel(){
   const labelRows=labelsVoor(me).filter(l=>!isGast(l,me)).map(l=>{const has=!!intakeOf(c,l.id);const st=G(c,l.id);
     return `<div class="row"><label class="lab"><span class="sw"><input type="checkbox" data-f="label" value="${l.id}" ${has?'checked':''}><i></i></span>${esc(l.naam)}${LABEL_SUB[l.id]?` <span class="muted" style="font-weight:400">· ${esc(LABEL_SUB[l.id])}</span>`:''}</label>${zonderRollen(l)?'<div class="help">Geen rollen of screening: wie beschikbaar is, komt op één lijst voor de organisatie.</div>':''}${st.length?`<div class="help"><span class="chips">${st.map(g=>chip(g,false)).join('')}</span></div>`:''}</div>`;}).join('');
   return `<div class="intake" data-crew="${c}">
-    <div class="band"></div><section class="panel"><h2>Stap 3: voor welke labels wil je je inzetten?</h2><div class="body">${labelRows}</div></section>
+    <div class="band"></div><section class="panel"><h2>Stap 3: voor welke labels wil jij je inzetten?</h2><div class="body">${labelRows}</div></section>
     ${gastLabelsVoor(me).map(l=>{const i=intakeOf(c,l.id);const eerder=i?(i.ervaring!=='nieuw'):null;const wil=!!i;const st=G(c,l.id);
       const yn=(f,v)=>`<label><input type="radio" name="gast_${f}_${l.id}" data-g="${f}" data-gl="${l.id}" value="ja" ${v===true?'checked':''}> Ja</label> <label style="margin-left:14px"><input type="radio" name="gast_${f}_${l.id}" data-g="${f}" data-gl="${l.id}" value="nee" ${v===false?'checked':''}> Nee</label>`;
       return `<div class="band"></div><section class="panel gast" data-gl="${l.id}"><h2>${esc(l.naam)}</h2><div class="body">
