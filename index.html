@@ -610,7 +610,25 @@ function afgewezenOverzicht(mine){
   const rows=af.map(g=>`<tr><td class="name">${esc(user(g.crew)?.naam||g.crew)}</td><td><span class="tag lbl">${esc(lbl(g.label).naam)}</span></td><td>${esc(fmtRol(g.rol))}</td><td>${esc(g.notitie||'')||'<span class="muted">geen notitie</span>'}</td><td class="muted" style="white-space:nowrap">${esc(user(g.door)?.naam||'')}<br>${esc(g.datum||'')}</td><td>${isLeider()||isKantoor()?`<button class="small" data-heropen="${g.crew}|${g.label}|${g.rol}">Terugdraaien</button>`:''}</td></tr>`).join('');
   return `<div class="band"></div><section class="panel"><h2>Afgewezen</h2><div class="body">
     <p class="muted">Alle afgewezen rollen binnen jouw labels, met de interne notitie. Alleen zichtbaar voor bewegingsleiders en kantoor; gaat nooit mee in een export. Terugdraaien zet de rol terug op "te beoordelen".</p>
-    <div class="tw"><table><thead><tr><th>Crewlid</th><th>Label</th><th>Rol</th><th>Notitie</th><th>Door / datum</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="muted">Nog niets afgewezen.</td></tr>'}</tbody></table></div></div></section>`;
+    <div class="tw"><table><thead><tr><th>Crewlid</th><th>Label</th><th>Rol</th><th>Notitie</th><th>Door / datum</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="muted">Nog niets afgewezen.</td></tr>'}</tbody></table></div>
+    ${af.length?`<h3 style="margin-top:18px">Contactlijst</h3>
+    <p class="muted">Eén regel per persoon, om contact op te nemen. Telefoon en mail komen uit het profiel; de notitie blijft erbuiten. <label style="margin-left:8px"><input type="checkbox" id="afAlleenZonder" ${UI.afAlleenZonder?'checked':''}> alleen wie voor dat label géén goedgekeurde rol meer heeft</label></p>
+    <div class="tools"><button class="small" data-aflijst="kopieer">Kopieer (plakken in sheet)</button><button class="small" data-aflijst="csv">Download CSV</button><span class="muted" id="afLijstN">${afContactRijen().length} personen</span></div>`:''}</div></section>`;
+}
+/* Contactlijst van afgewezen crew: naam, telefoon, mail, label, afgewezen rol(len), nog goedgekeurd voor. Eén regel per persoon × label. */
+function afContactRijen(){
+  const labels=screenLabels();
+  const af=D.goedkeuringen.filter(g=>g.status==='afgewezen'&&labels.includes(g.label)&&screenDoorMij(g.crew,g.label));
+  const per={};af.forEach(g=>{const k=g.crew+'|'+g.label;(per[k]=per[k]||{crew:g.crew,label:g.label,rollen:[]}).rollen.push(g.rol);});
+  return Object.values(per).map(x=>{const u=user(x.crew)||{};const ok=gescreend(x.crew,x.label);
+    return {naam:u.naam||'',telefoon:u.telefoon||'',email:u.email||'',label:lbl(x.label)?.naam||x.label,afgewezen:x.rollen.map(fmtRol).join(', '),goedgekeurd:ok.map(fmtRol).join(', ')};})
+    .filter(r=>!UI.afAlleenZonder||!r.goedgekeurd)
+    .sort((a,b)=>a.naam.localeCompare(b.naam,'nl',{sensitivity:'base'})||a.label.localeCompare(b.label));
+}
+function afContactTekst(sep){
+  const kop=['Naam','Telefoon','E-mail','Label','Afgewezen voor','Nog goedgekeurd voor'];
+  const q=v=>sep===','?'"'+String(v).replace(/"/g,'""')+'"':String(v).replace(/\t/g,' ');
+  return [kop,...afContactRijen().map(r=>[r.naam,r.telefoon,r.email,r.label,r.afgewezen,r.goedgekeurd])].map(r=>r.map(q).join(sep)).join('\n');
 }
 /* Informatieve lijst per functie: wie heeft die functie eerder vervuld (automatisch goedgekeurd). Alleen afkeuren mogelijk. */
 function ervarenPerFunctie(mine){
@@ -705,11 +723,12 @@ function viewProfiel(){
   const base=mine[0]||{ervaring:'nieuw',vervuld:[],voorkeur:[],toelichting:''};
   const vervuld=[...new Set(mine.flatMap(i=>i.vervuld))], voorkeur=[...new Set(mine.flatMap(i=>i.voorkeur))];
   const sw=(f,r,on)=>`<label class="sw"><input type="checkbox" data-f="${f}" value="${r}" ${on?'checked':''}><i></i></label>`;
-  const labelRows=labelsVoor(me).filter(l=>!isGast(l,me)).map(l=>{const has=!!intakeOf(c,l.id);const st=G(c,l.id);
+  // Het crewlid ziet alleen de goedgekeurde rollen; afgewezen en nog te beoordelen rollen blijven intern.
+  const labelRows=labelsVoor(me).filter(l=>!isGast(l,me)).map(l=>{const has=!!intakeOf(c,l.id);const st=G(c,l.id).filter(g=>g.status==='goedgekeurd');
     return `<div class="row"><label class="lab"><span class="sw"><input type="checkbox" data-f="label" value="${l.id}" ${has?'checked':''}><i></i></span>${esc(l.naam)}${LABEL_SUB[l.id]?` <span class="muted" style="font-weight:400">· ${esc(LABEL_SUB[l.id])}</span>`:''}</label>${zonderRollen(l)?'<div class="help">Geen rollen of screening: wie beschikbaar is, komt op één lijst voor de organisatie.</div>':''}${st.length?`<div class="help"><span class="chips">${st.map(g=>chip(g,false)).join('')}</span></div>`:''}</div>`;}).join('');
   return `<div class="intake" data-crew="${c}">
     <div class="band"></div><section class="panel"><h2>Stap 3: voor welke labels wil jij je inzetten?</h2><div class="body">${labelRows}</div></section>
-    ${gastLabelsVoor(me).map(l=>{const i=intakeOf(c,l.id);const eerder=i?(i.ervaring!=='nieuw'):null;const wil=!!i;const st=G(c,l.id);
+    ${gastLabelsVoor(me).map(l=>{const i=intakeOf(c,l.id);const eerder=i?(i.ervaring!=='nieuw'):null;const wil=!!i;const st=G(c,l.id).filter(g=>g.status==='goedgekeurd');
       const yn=(f,v)=>`<label><input type="radio" name="gast_${f}_${l.id}" data-g="${f}" data-gl="${l.id}" value="ja" ${v===true?'checked':''}> Ja</label> <label style="margin-left:14px"><input type="radio" name="gast_${f}_${l.id}" data-g="${f}" data-gl="${l.id}" value="nee" ${v===false?'checked':''}> Nee</label>`;
       return `<div class="band"></div><section class="panel gast" data-gl="${l.id}"><h2>${esc(l.naam)}</h2><div class="body">
         <p class="muted">${esc(l.naam)} organiseert vrouwenweekenden, maar in de facilitaire CREW gaan ook mannen mee. ${eerder===false&&!approvedRoles(c,l.id).length?'Je bent nog niet eerder mee geweest: het kernteam van '+esc(l.naam)+' screent je aanvraag eerst, je hoort hierover van ons begin december. Daarna zie je de weekenden bij stap 4.':''}</p>
@@ -1081,6 +1100,10 @@ document.addEventListener('click',async e=>{
   if(b.dataset.rollen){const u=user(b.dataset.rollen);const cur=rollenVan(u).join(',');const inp=prompt('Rollen voor '+u.naam+' (komma-gescheiden: crew, leider, kantoor):',cur);if(inp===null)return;const rollen=inp.split(',').map(x=>x.trim().toLowerCase()).filter(x=>['crew','leider','kantoor'].includes(x));if(!rollen.length){toast('Geen geldige rol');return;}await db.setRollen(u.id,rollen);u.rollen=rollen;await refresh();toast('Rollen bijgewerkt');return;}
   if(b.dataset.deltw){await db.deleteToewijzing(b.dataset.deltw);await refresh();toast('Toewijzing verwijderd');return;}
   if(b.dataset.resdel){const [wid,rol,crew]=b.dataset.resdel.split('|');await db.setReserve(wid,rol,crew,false);await refresh();toast('Reserve verwijderd');return;}
+  if(b.dataset.aflijst){const n=afContactRijen().length;if(!n){toast('Geen personen in de lijst');return;}
+    if(b.dataset.aflijst==='csv'){const blob=new Blob(['\ufeff'+afContactTekst(',')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`afgewezen-contact-${today()}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast(`CSV met ${n} personen`);}
+    else{try{await navigator.clipboard.writeText(afContactTekst('\t'));toast(`${n} personen gekopieerd`);}catch(e){showErr('Kopiëren lukt niet',['Gebruik Download CSV.']);}}
+    return;}
   if(b.dataset.verd){UI.verdFilter=b.dataset.verd;await render();return;}
   if(b.dataset.deltwp){const t=(D.twPending||[])[+b.dataset.deltwp];if(t){await db.deleteToewijzingPending(t);await refresh();toast('Vooraf-toewijzing verwijderd');}return;}
 });
@@ -1128,6 +1151,7 @@ document.addEventListener('submit',async e=>{
 });
 document.addEventListener('change',async e=>{
   const t=e.target;
+  if(t.id==='afAlleenZonder'){UI.afAlleenZonder=t.checked;document.getElementById('afLijstN').textContent=afContactRijen().length+' personen';return;}
   if(t.dataset.roladd){const [crew,label]=t.dataset.roladd.split('|');if(!t.value)return;const ok=await db.addVoorstel({crew,label,rol:t.value,door:me.id,status:isLeider()&&!isKantoor()?'goedgekeurd':'voorgesteld'});toast(ok?(isLeider()&&!isKantoor()?'Rol toegevoegd en goedgekeurd':'Rol voorgesteld, bewegingsleider beoordeelt'):'Bestaat al');await refresh();return;}
   if(t.dataset.cstatus){try{await db.setCrewStatus(t.dataset.cstatus,t.dataset.clabel,t.value||null);}catch(err){return;}await refresh();toast(t.value?'Status: '+STATUS_TXT[t.value]:'Status gewist');return;}
   if(t.dataset.resadd){const [wid,rol]=t.dataset.resadd.split('|');if(!t.value)return;try{await db.setReserve(wid,rol,t.value,true);}catch(err){return;}await refresh();toast('Reserve toegevoegd');return;}
