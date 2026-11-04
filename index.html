@@ -383,7 +383,7 @@ function LocalStore(){
       save();},
     async deleteIntake(crew,label){S.intake=S.intake.filter(i=>!(i.crew===crew&&i.label===label));save();},
     async setStatus(g,status,door,notitie=''){const x=S.goedkeuringen.find(y=>y.crew===g.crew&&y.label===g.label&&y.rol===g.rol);x.status=status;x.door=door;x.datum=today();x.notitie=notitie;save();},
-    async addVoorstel(g){if(S.goedkeuringen.some(y=>y.crew===g.crew&&y.label===g.label&&y.rol===g.rol))return false;S.goedkeuringen.push({...g,status:'voorgesteld',bron:'kantoor',datum:today(),notitie:''});save();return true;},
+    async addVoorstel(g){if(S.goedkeuringen.some(y=>y.crew===g.crew&&y.label===g.label&&y.rol===g.rol))return false;S.goedkeuringen.push({...g,status:g.status||'voorgesteld',bron:'kantoor',datum:today(),notitie:''});save();return true;},
     async setAvail(crew,wid,on){S.beschikbaar[crew]=S.beschikbaar[crew]||[];const i=S.beschikbaar[crew].indexOf(wid);if(on&&i<0)S.beschikbaar[crew].push(wid);if(!on&&i>=0)S.beschikbaar[crew].splice(i,1);save();},
     async setSlot(wid,key,crew){S.indeling[wid]=S.indeling[wid]||{};S.indeling[wid][key]=crew;save();},
     async saveWeekend(w){const k=S.weekends.findIndex(x=>x.id===w.id);if(k>=0)S.weekends[k]=w;else S.weekends.push(w);save();},
@@ -408,29 +408,31 @@ function LocalStore(){
 function SupabaseStore(client){
   // Verwacht schema uit supabase/schema.sql. Alle autorisatie zit in RLS; de frontend filtert alleen voor de weergave.
   const one=async q=>{const {data,error}=await q;if(error){showErr('Opslaan is niet gelukt',[uitlegFout(error)]);throw error;}return data;};
+  /* Alles ophalen, in pagina's van 1000 (de API geeft per verzoek maximaal 1000 rijen; daarboven viel data stil weg). */
+  const alle=async (tabel,kolommen,order)=>{const out=[];const N=1000;for(let from=0;;from+=N){let q=client.from(tabel).select(kolommen).range(from,from+N-1);if(order)q=q.order(order);const {data,error}=await q;if(error){showErr('Laden is niet gelukt',[tabel+': '+uitlegFout(error)]);throw error;}out.push(...(data||[]));if(!data||data.length<N)break;}return out;};
   return {
     mode:'live',
     async init(){
       const [labels,rollen,users]=await Promise.all([
         one(client.from('labels').select('id,naam,voor,gast,leider_m,leider_v,zonder_rollen')),
         one(client.from('rollen').select('id,volgorde').order('volgorde')),
-        one(client.from('profiles').select('id,naam,rol,rollen,geslacht,email,telefoon')),
+        alle('profiles','id,naam,rol,rollen,geslacht,email,telefoon'),
       ]);
       return {labels,rollen:rollen.map(r=>r.id),users};
     },
     async load(){
       const [intake,goedkeuringen,besch,ind,weekends,toewijzingen,medisch,pending,twPending,resRows,status]=await Promise.all([
-        one(client.from('intake').select('crew,label,ervaring,vervuld,voorkeur,toelichting')),
-        one(client.from('goedkeuringen').select('crew,label,rol,status,bron,door,datum,notitie')),
-        one(client.from('beschikbaarheid').select('crew,weekend')),
-        one(client.from('indeling').select('weekend,rol,plek,crew')),
-        one(client.from('weekends').select('id,label,naam,datum,start_datum,slots,startdag,terugkomavond,crewmeeting,voor,opmerking,sheet_url').order('start_datum')),
-        one(client.from('toewijzingen').select('id,user,functie,soort,weekend,label,rol')),
-        one(client.from('medisch').select('crew,medisch,medisch_toelichting,allergie,allergie_toelichting,ice_naam,ice_telefoon,ice_relatie,ingevuld')),
-        client.from('profiles_pending').select('email,naam,rol,rollen,geslacht').then(r=>r.data||[]),
-        client.from('toewijzingen_pending').select('email,functie,soort,weekend,label,rol').then(r=>r.data||[]),
-        client.from('reserve').select('weekend,rol,crew,volgorde').then(r=>r.data||[]),
-        client.from('crew_status').select('crew,label,status,notitie,door,datum').then(r=>r.data||[]),
+        alle('intake','crew,label,ervaring,vervuld,voorkeur,toelichting'),
+        alle('goedkeuringen','crew,label,rol,status,bron,door,datum,notitie'),
+        alle('beschikbaarheid','crew,weekend'),
+        alle('indeling','weekend,rol,plek,crew'),
+        alle('weekends','id,label,naam,datum,start_datum,slots,startdag,terugkomavond,crewmeeting,voor,opmerking,sheet_url','start_datum'),
+        alle('toewijzingen','id,user,functie,soort,weekend,label,rol'),
+        alle('medisch','crew,medisch,medisch_toelichting,allergie,allergie_toelichting,ice_naam,ice_telefoon,ice_relatie,ingevuld'),
+        alle('profiles_pending','email,naam,rol,rollen,geslacht').catch(()=>[]),
+        alle('toewijzingen_pending','email,functie,soort,weekend,label,rol').catch(()=>[]),
+        alle('reserve','weekend,rol,crew,volgorde').catch(()=>[]),
+        alle('crew_status','crew,label,status,notitie,door,datum').catch(()=>[]),
       ]);
       const reserve={};resRows.forEach(r=>((reserve[r.weekend]=reserve[r.weekend]||{})[r.rol]=(reserve[r.weekend][r.rol]||[])).push(r.crew));
       const beschikbaar={};besch.forEach(b=>(beschikbaar[b.crew]=beschikbaar[b.crew]||[]).push(b.weekend));
@@ -438,13 +440,13 @@ function SupabaseStore(client){
       let verdeling=null;try{const {data}=await client.rpc('verdeling_overzicht');if(Array.isArray(data))verdeling=data;}catch(e){}
       return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,twPending,reserve,status,verdeling};
     },
-    async loadUsers(){const {data}=await client.from('profiles').select('id,naam,rol,rollen,geslacht,email,telefoon');return data||null;},
+    async loadUsers(){try{return await alle('profiles','id,naam,rol,rollen,geslacht,email,telefoon');}catch(e){return null;}},
     async saveIntake(i){await one(client.from('intake').upsert(i,{onConflict:'crew,label'}));await one(client.rpc('stel_voor_uit_intake',{p_crew:i.crew,p_label:i.label}));},
     async deleteIntake(crew,label){await one(client.from('intake').delete().match({crew,label}));},
     async setStatus(g,status,door,notitie=''){const rows=await one(client.from('goedkeuringen').update({status,door,notitie,datum:today()}).match({crew:g.crew,label:g.label,rol:g.rol}).select('crew'));
       if(!rows||!rows.length){showErr('Screening niet opgeslagen',['De database weigert de wijziging: je bent niet gekoppeld als bewegingsleider van dit label voor deze doelgroep (man/vrouw). Kantoor koppelt bewegingsleiders onder Crewbeheer.']);throw new Error('geen rechten');}},
     async setLeider(label,veld,userId){await one(client.from('labels').update({[veld]:userId||null}).eq('id',label));},
-    async addVoorstel(g){const {error}=await client.from('goedkeuringen').insert({...g,status:'voorgesteld',bron:'kantoor',datum:today()});if(error){if(error.code==='23505')return false;toast('Fout: '+error.message);throw error;}return true;},
+    async addVoorstel(g){const {error}=await client.from('goedkeuringen').insert({...g,status:g.status||'voorgesteld',bron:'kantoor',datum:today()});if(error){if(error.code==='23505')return false;toast('Fout: '+error.message);throw error;}return true;},
     async setAvail(crew,weekend,on){if(on)await one(client.from('beschikbaarheid').upsert({crew,weekend}));else await one(client.from('beschikbaarheid').delete().match({crew,weekend}));},
     async setSlot(weekend,key,crew){const [rol,plek]=key.split('#');if(crew)await one(client.from('indeling').upsert({weekend,rol,plek:+plek,crew},{onConflict:'weekend,rol,plek'}));else await one(client.from('indeling').delete().match({weekend,rol,plek:+plek}));},
     async saveWeekend(w){await one(client.from('weekends').upsert(w));},
@@ -497,8 +499,8 @@ const G=(c,l)=>D.goedkeuringen.filter(g=>g.crew===c&&(!l||g.label===l));
 const gescreend=(c,l)=>G(c,l).filter(g=>g.status==='goedgekeurd').map(g=>g.rol);
 /* Kiesbaar voor de PL = goedgekeurd EN door het crewlid gewenst voor 2027. Wat iemand ooit deed telt alleen voor de screening. */
 const wil=(c,l)=>intakeOf(c,l)?.voorkeur||[];
-const isApproved=(c,l,r)=>wil(c,l).includes(r)&&D.goedkeuringen.some(g=>g.crew===c&&g.label===l&&g.rol===r&&g.status==='goedgekeurd');
-const approvedRoles=(c,l)=>gescreend(c,l).filter(r=>wil(c,l).includes(r));
+const isApproved=(c,l,r)=>D.goedkeuringen.some(g=>g.crew===c&&g.label===l&&g.rol===r&&g.status==='goedgekeurd'&&(g.bron==='kantoor'||wil(c,l).includes(r)));
+const approvedRoles=(c,l)=>gescreend(c,l).filter(r=>isApproved(c,l,r));
 const isAvail=(c,w)=>(D.beschikbaar[c]||[]).includes(w);
 const STATUS_TXT={plek_geven:'Nog een plek geven',onder_review:'Onder review',ongeschikt:'Ongeschikt'};
 const crewStatus=(c,l)=>(D.status||[]).find(x=>x.crew===c&&x.label===l)?.status||'';
@@ -584,7 +586,7 @@ function viewGoedkeuring(){
     const nAv=D.weekends.filter(w=>labels.includes(w.label)&&isAvail(c.id,w.id)).length;
     return `<tr><td class="name">${esc(c.naam)}<div class="muted" style="font-weight:400;font-size:12px">${c.geslacht||''} · ${nAv?nAv+'× beschikbaar':'nog geen beschikbaarheid'}</div></td><td>${per}${opm?`<div class="muted" style="font-size:12px">„${esc(opm)}”</div>`:''}</td></tr>`;
   }).join('');
-  const add=isKantoor()?`<div class="tools"><span class="muted">Nieuw voorstel:</span><select id="nvCrew">${crewUsers().map(c=>`<option value="${c.id}">${esc(c.naam)}</option>`).join('')}</select><select id="nvLabel">${labels.map(l=>`<option value="${l}">${esc(lbl(l).naam)}</option>`).join('')}</select><select id="nvRol">${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select><button id="nvAdd" class="small">Voorstellen</button></div>`:'';
+  const add=(isKantoor()||isLeider())?`<div class="tools"><span class="muted">Rol toevoegen:</span><select id="nvCrew">${crewUsers().map(c=>`<option value="${c.id}">${esc(c.naam)}</option>`).join('')}</select><select id="nvLabel">${labels.map(l=>`<option value="${l}">${esc(lbl(l).naam)}</option>`).join('')}</select><select id="nvRol">${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select>${isLeider()?`<select id="nvStatus"><option value="goedgekeurd">direct goedgekeurd</option><option value="voorgesteld">eerst beoordelen</option></select>`:''}<button id="nvAdd" class="small">Toevoegen</button><span class="muted" style="font-size:12px">Voor wie zelf geen (passende) rol heeft opgegeven. ${isLeider()?'Goedgekeurd = direct kiesbaar voor de projectleider.':'Komt als voorstel bij de bewegingsleider.'}</span></div>`:'';
   const scope=isLeider()?M.labels.flatMap(l=>[l.leider_m===me.id?l.naam+' (mannen)':null,l.leider_v===me.id?l.naam+' (vrouwen)':null]).filter(Boolean).join(', '):'';
   return `<div class="band"></div><section class="panel">
     <h2>Screening per label × rol</h2><div class="body">
@@ -597,7 +599,7 @@ function viewGoedkeuring(){
       <div class="stat"><div class="v">${mine.filter(g=>g.status==='goedgekeurd'&&g.door).length}</div><div class="l">goedgekeurd door jou</div></div>
       <div class="stat"><div class="v">${crewUsers().filter(c=>D.weekends.some(w=>labels.includes(w.label)&&isAvail(c.id,w.id))&&!labels.some(l=>approvedRoles(c.id,l).length)).length}</div><div class="l">beschikbaar, nog niet kiesbaar</div></div>
     </div>
-    ${isLeider()?'':add}
+    ${add}
     <div class="tw"><table><thead><tr><th>Crewlid</th><th>Intake en beslissingen</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="muted">Nog geen intake of voorstellen.</td></tr>'}</tbody></table></div>
     <p class="note" style="margin-top:12px">Niet zichtbaar hier: mail, telefoon. Afwijs-notities gaan nooit mee naar de exportsheet.</p></div></section>
     ${ervarenPerFunctie(mine)}${afgewezenOverzicht(mine)}`;
@@ -957,7 +959,9 @@ function viewVerdeling(){
   const f=UI.verdFilter||'alle';
   const lijst={alle:V.slice().sort((a,b)=>b.n-a.n||a.naam.localeCompare(b.naam)),gekozen,over,nul}[f]||V;
   const tile=(k,v,l,cls='')=>`<button class="stat ${f===k?'on':''}" data-verd="${k}" type="button"><div class="v ${cls}">${v}</div><div class="l">${l}</div></button>`;
-  const statusSel=(v,label)=>`<select data-cstatus="${v.id}" data-clabel="${label}" class="small"><option value="">– status –</option>${Object.entries(STATUS_TXT).map(([k,t])=>`<option value="${k}" ${v.status[label]===k?'selected':''}>${t}</option>`).join('')}</select>`;
+  const magRol=l=>isKantoor()||(isLeider()&&myLabels().includes(l));
+  const rolAdd=(v,label)=>magRol(label)&&!zonderRollen(label)?`<select data-roladd="${v.id}|${label}" class="small" title="Rol toevoegen voor dit crewlid"><option value="">+ rol toevoegen</option>${M.rollen.filter(r=>!G(v.id,label).some(g=>g.rol===r)).map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select>`:'';
+  const statusSel=(v,label)=>`<select data-cstatus="${v.id}" data-clabel="${label}" class="small"><option value="">– status –</option>${Object.entries(STATUS_TXT).map(([k,t])=>`<option value="${k}" ${v.status[label]===k?'selected':''}>${t}</option>`).join('')}</select> ${rolAdd(v,label)}`;
   const row=v=>`<tr><td class="name ${v.n>MAX_OK?'over':''}">${esc(v.naam)}</td><td class="right ${v.n>MAX_OK?'over':''}">${v.n}${v.reserve.length?` <span class="muted" title="reserve">+${v.reserve.length}r</span>`:''}</td><td>${esc(v.waar.map(x=>`${x.naam} (${fmtRol(x.rol)})`).join(', '))}${v.reserve.length?`<div class="muted" style="font-size:12px">Reserve: ${esc(v.reserve.map(x=>`${x.naam} (${fmtRol(x.rol)})`).join(', '))}</div>`:''}</td><td class="right">${v.beschikbaar.length}</td></tr>`;
   const nulRow=v=>{const labels=[...new Set(v.beschikbaar.map(b=>b.label))];
     return `<tr><td class="name">${esc(v.naam)}</td><td>${v.beschikbaar.map(b=>`${esc(b.naam)}${b.rollen.length?' <span class="muted">('+esc(fmtRollen(b.rollen))+')</span>':' <span class="muted">(nog niet gescreend)</span>'}`).join('<br>')}</td><td>${labels.map(l=>`<div style="margin-bottom:4px"><span class="muted" style="font-size:12px">${esc(lbl(l)?.naam||l)}</span><br>${statusSel(v,l)}</div>`).join('')}</td></tr>`;};
@@ -965,7 +969,7 @@ function viewVerdeling(){
   return `<div class="band"></div><section class="panel"><h2>Verdeling <span class="muted" style="font-size:14px;text-transform:none;letter-spacing:0">· ${esc(scopeTxt)}</span></h2><div class="body">
     <p class="muted">Hoe vaak is iedereen gekozen, over de weekenden van ${isKantoor()?'alle labels':'jouw label(s)'} heen. Vaker dan ${MAX_OK}x staat oranje. Klik op een cijfer om te filteren. Doel: niemand 10x, niemand 0x.</p>
     <div class="stats">${tile('alle',V.length,'beschikbaar gesteld')}${tile('gekozen',gekozen.length,'minstens 1x gekozen')}${tile('over',over.length,`vaker dan ${MAX_OK}x`,over.length?'over':'')}${tile('nul',nul.length,'nog 0x gekozen')}</div>
-    ${f==='nul'?`<p class="muted" style="margin-top:12px">Wel beschikbaar, nog nergens ingedeeld. Tussen haakjes de gescreende rollen voor dat label. Geef per label een status: <b>Nog een plek geven</b> (zoek nog een plek), <b>Onder review</b> (eerst overleg) of <b>Ongeschikt</b> (dit jaar niet). De status is alleen zichtbaar voor kantoor, bewegingsleiders en projectleiders.</p>
+    ${f==='nul'?`<p class="muted" style="margin-top:12px">Wel beschikbaar, nog nergens ingedeeld. Tussen haakjes de gescreende rollen voor dat label. Geef per label een status: <b>Nog een plek geven</b> (zoek nog een plek), <b>Onder review</b> (eerst overleg) of <b>Ongeschikt</b> (dit jaar niet). De status is alleen zichtbaar voor kantoor, bewegingsleiders en projectleiders. Met <b>+ rol toevoegen</b> geef je iemand een rol die hij zelf niet heeft opgegeven (bewegingsleider: direct goedgekeurd; kantoor: als voorstel).</p>
     <div class="tw"><table><thead><tr><th>Naam</th><th>Beschikbaar voor</th><th>Status per label</th></tr></thead><tbody>${nul.map(nulRow).join('')||'<tr><td colspan="3" class="muted">Iedereen die beschikbaar is, is minstens één keer gekozen.</td></tr>'}</tbody></table></div>`
     :`<div class="tw"><table><thead><tr><th>Naam</th><th class="right">Gekozen</th><th>Waar</th><th class="right">Beschikbaar voor</th></tr></thead><tbody>${lijst.map(row).join('')||`<tr><td colspan="4" class="muted">${f==='over'?'Niemand is vaker dan '+MAX_OK+'x gekozen.':'Nog niemand ingedeeld.'}</td></tr>`}</tbody></table></div>`}
   </div></section>`;
@@ -1038,7 +1042,7 @@ document.addEventListener('click',async e=>{
     clearErr();try{if(b.dataset.ok){await db.setStatus({crew,label,rol},'goedgekeurd',me.id);toast(`${user(crew).naam} goedgekeurd: ${lbl(label).naam} · ${fmtRol(rol)}`);}
     else{const n=prompt('Reden (intern):','')??null;if(n===null)return;await db.setStatus({crew,label,rol},'afgewezen',me.id,n);toast('Afgewezen');}}catch(err){return;}
     await refresh();return;}
-  if(b.id==='nvAdd'){const cu=user(nvCrew.value);if(!labelsVoor(cu).some(l=>l.id===nvLabel.value)){toast(`${lbl(nvLabel.value).naam} is niet beschikbaar voor dit crewlid`);return;}const ok=await db.addVoorstel({crew:nvCrew.value,label:nvLabel.value,rol:nvRol.value,door:me.id});toast(ok?'Voorstel toegevoegd':'Bestaat al');await refresh();return;}
+  if(b.id==='nvAdd'){const cu=user(nvCrew.value);if(!labelsVoor(cu).some(l=>l.id===nvLabel.value)){toast(`${lbl(nvLabel.value).naam} is niet beschikbaar voor dit crewlid`);return;}const st=document.getElementById('nvStatus')?.value||'voorgesteld';const ok=await db.addVoorstel({crew:nvCrew.value,label:nvLabel.value,rol:nvRol.value,door:me.id,status:st});toast(ok?(st==='goedgekeurd'?'Rol toegevoegd en goedgekeurd':'Voorstel toegevoegd'):'Bestaat al');await refresh();return;}
   if(b.id==='saveAll'){clearErr();const box=document.querySelector('.intake');if(!box)return;const val=f=>[...box.querySelectorAll(`[data-f="${f}"]:checked`)].map(x=>x.value);
     const fouten=[];
     if(!isCrew())fouten.push('Je account staat niet als crew ingesteld; alleen crew kan een inzet opgeven. Vraag kantoor om je rollen aan te passen.');
@@ -1124,6 +1128,7 @@ document.addEventListener('submit',async e=>{
 });
 document.addEventListener('change',async e=>{
   const t=e.target;
+  if(t.dataset.roladd){const [crew,label]=t.dataset.roladd.split('|');if(!t.value)return;const ok=await db.addVoorstel({crew,label,rol:t.value,door:me.id,status:isLeider()&&!isKantoor()?'goedgekeurd':'voorgesteld'});toast(ok?(isLeider()&&!isKantoor()?'Rol toegevoegd en goedgekeurd':'Rol voorgesteld, bewegingsleider beoordeelt'):'Bestaat al');await refresh();return;}
   if(t.dataset.cstatus){try{await db.setCrewStatus(t.dataset.cstatus,t.dataset.clabel,t.value||null);}catch(err){return;}await refresh();toast(t.value?'Status: '+STATUS_TXT[t.value]:'Status gewist');return;}
   if(t.dataset.resadd){const [wid,rol]=t.dataset.resadd.split('|');if(!t.value)return;try{await db.setReserve(wid,rol,t.value,true);}catch(err){return;}await refresh();toast('Reserve toegevoegd');return;}
   if(t.id==='who'){me=user(t.value);UI.step=null;await render();return;}
