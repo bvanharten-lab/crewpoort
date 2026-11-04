@@ -576,7 +576,7 @@ function viewGoedkeuring(){
   const labels=screenLabels();
   const mine=D.goedkeuringen.filter(g=>labels.includes(g.label)&&screenDoorMij(g.crew,g.label));
   const cnt=st=>mine.filter(g=>g.status===st).length;
-  const rows=crewUsers().filter(c=>mine.some(g=>g.crew===c.id)||D.intake.some(i=>i.crew===c.id&&labels.includes(i.label)&&screenDoorMij(c.id,i.label))).map(c=>{
+  const rows=crewUsers().filter(c=>mine.some(g=>g.crew===c.id)||D.intake.some(i=>i.crew===c.id&&labels.includes(i.label)&&screenDoorMij(c.id,i.label))).sort((a,b)=>(a.naam||'').localeCompare(b.naam||'','nl',{sensitivity:'base'})).map(c=>{
     const per=labels.filter(l=>screenDoorMij(c.id,l)&&(mine.some(g=>g.crew===c.id&&g.label===l)||intakeOf(c.id,l))).map(l=>{
       const i=intakeOf(c.id,l);
       const chips=mine.filter(g=>g.crew===c.id&&g.label===l).map(g=>chip(g,isLeider())).join('');
