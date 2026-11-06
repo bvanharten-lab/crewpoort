@@ -368,7 +368,7 @@ function LocalStore(){
     set('c4','AR','PL','goedgekeurd','u_nadine');set('c4','AR','GL','goedgekeurd','u_nadine');
     set('c9','LI','PL','goedgekeurd','u_auke');set('c7','4M','EHBO','goedgekeurd','u_wouter');
     const beschikbaar={c5:['w1','w2','w4','w6'],c1:['w1','w2','w5'],c4:['w9','w10'],c9:['w11','w12','w2'],c7:['w1','w2'],c13:['w1','w4'],c3:['w1','w2','w4'],c10:['w6','w8'],c6:['w9','w6']};
-    return {intake:JSON.parse(JSON.stringify(DEMO.intake)),goedkeuringen,beschikbaar,indeling:{},weekends:JSON.parse(JSON.stringify(DEMO.weekends)),toewijzingen:JSON.parse(JSON.stringify(DEMO.toewijzingen)),medisch:JSON.parse(JSON.stringify(DEMO.medisch)),pending:[],twPending:[],reserve:{},status:[]};
+    return {intake:JSON.parse(JSON.stringify(DEMO.intake)),goedkeuringen,beschikbaar,indeling:{},weekends:JSON.parse(JSON.stringify(DEMO.weekends)),toewijzingen:JSON.parse(JSON.stringify(DEMO.toewijzingen)),medisch:JSON.parse(JSON.stringify(DEMO.medisch)),pending:[],twPending:[],reserve:{},status:[],voorkeur:{}};
   };
   try{S=JSON.parse(localStorage.getItem(KEY))||seed();}catch(e){S=seed();}
   const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}};
@@ -398,6 +398,8 @@ function LocalStore(){
     async setLeider(label,veld,userId){const l=DEMO.labels.find(x=>x.id===label);l[veld]=userId||null;},
     async deleteToewijzing(id){S.toewijzingen=S.toewijzingen.filter(t=>t.id!==id);save();},
     async addToewijzingPending(t){(S.twPending=S.twPending||[]).push(t);save();},
+    async setVoorkeur(wid,rol,plek,crew){S.voorkeur=S.voorkeur||{};const r=(S.voorkeur[wid]=S.voorkeur[wid]||{});if(crew)r[`${rol}#${plek}`]={weekend:wid,rol,plek,crew,door:me.id,status:'voorgesteld',notitie:''};else delete r[`${rol}#${plek}`];save();},
+    async voorkeurBesluit(wid,rol,plek,besluit){const v=((S.voorkeur||{})[wid]||{})[`${rol}#${plek}`];if(!v)return;v.status=besluit;if(besluit==='goedgekeurd'){S.indeling[wid]=S.indeling[wid]||{};S.indeling[wid][`${rol}#${plek}`]=v.crew;}save();},
     async setReserve(wid,rol,crew,on){S.reserve=S.reserve||{};const r=(S.reserve[wid]=S.reserve[wid]||{});r[rol]=(r[rol]||[]).filter(c=>c!==crew);if(on)r[rol].push(crew);save();},
     async setCrewStatus(crew,label,status){S.status=(S.status||[]).filter(x=>!(x.crew===crew&&x.label===label));if(status)S.status.push({crew,label,status,door:me.id});save();},
     async deleteToewijzingPending(t){S.twPending=(S.twPending||[]).filter(x=>JSON.stringify(x)!==JSON.stringify(t));save();},
@@ -421,7 +423,7 @@ function SupabaseStore(client){
       return {labels,rollen:rollen.map(r=>r.id),users};
     },
     async load(){
-      const [intake,goedkeuringen,besch,ind,weekends,toewijzingen,medisch,pending,twPending,resRows,status]=await Promise.all([
+      const [intake,goedkeuringen,besch,ind,weekends,toewijzingen,medisch,pending,twPending,resRows,status,vkRows]=await Promise.all([
         alle('intake','crew,label,ervaring,vervuld,voorkeur,toelichting'),
         alle('goedkeuringen','crew,label,rol,status,bron,door,datum,notitie'),
         alle('beschikbaarheid','crew,weekend'),
@@ -433,12 +435,14 @@ function SupabaseStore(client){
         alle('toewijzingen_pending','email,functie,soort,weekend,label,rol').catch(()=>[]),
         alle('reserve','weekend,rol,crew,volgorde').catch(()=>[]),
         alle('crew_status','crew,label,status,notitie,door,datum').catch(()=>[]),
+        alle('indeling_voorkeur','weekend,rol,plek,crew,door,status,notitie,datum').catch(()=>[]),
       ]);
+      const voorkeur={};vkRows.forEach(v=>(voorkeur[v.weekend]=voorkeur[v.weekend]||{})[`${v.rol}#${v.plek}`]=v);
       const reserve={};resRows.forEach(r=>((reserve[r.weekend]=reserve[r.weekend]||{})[r.rol]=(reserve[r.weekend][r.rol]||[])).push(r.crew));
       const beschikbaar={};besch.forEach(b=>(beschikbaar[b.crew]=beschikbaar[b.crew]||[]).push(b.weekend));
       const indeling={};ind.forEach(i=>(indeling[i.weekend]=indeling[i.weekend]||{})[`${i.rol}#${i.plek}`]=i.crew);
       let verdeling=null;try{const {data}=await client.rpc('verdeling_overzicht');if(Array.isArray(data))verdeling=data;}catch(e){}
-      return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,twPending,reserve,status,verdeling};
+      return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,twPending,reserve,status,voorkeur,verdeling};
     },
     async loadUsers(){try{return await alle('profiles','id,naam,rol,rollen,geslacht,email,telefoon');}catch(e){return null;}},
     async saveIntake(i){await one(client.from('intake').upsert(i,{onConflict:'crew,label'}));await one(client.rpc('stel_voor_uit_intake',{p_crew:i.crew,p_label:i.label}));},
@@ -460,6 +464,8 @@ function SupabaseStore(client){
     async setRollen(id,rollen){await one(client.rpc('zet_rollen',{p_user:id,p_rollen:rollen}));},
     async deleteToewijzing(id){await one(client.from('toewijzingen').delete().eq('id',id));},
     async addToewijzingPending(t){await one(client.from('toewijzingen_pending').insert({...t,email:t.email.toLowerCase()}));try{await client.rpc('verwerk_toewijzingen_pending');}catch(e){}},
+    async setVoorkeur(wid,rol,plek,crew){if(crew)await one(client.from('indeling_voorkeur').upsert({weekend:wid,rol,plek,crew,door:me.id,status:'voorgesteld',notitie:'',datum:today()},{onConflict:'weekend,rol,plek'}));else await one(client.from('indeling_voorkeur').delete().match({weekend:wid,rol,plek}));},
+    async voorkeurBesluit(wid,rol,plek,besluit){await one(client.rpc('voorkeur_besluit',{p_weekend:wid,p_rol:rol,p_plek:plek,p_besluit:besluit,p_notitie:''}));},
     async setReserve(wid,rol,crew,on){if(on)await one(client.from('reserve').upsert({weekend:wid,rol,crew},{onConflict:'weekend,rol,crew'}));else await one(client.from('reserve').delete().match({weekend:wid,rol,crew}));},
     async setCrewStatus(crew,label,status){if(status)await one(client.from('crew_status').upsert({crew,label,status,door:me.id,datum:today()},{onConflict:'crew,label'}));else await one(client.from('crew_status').delete().match({crew,label}));},
     async verwerkPending(){try{const {data}=await client.rpc('verwerk_toewijzingen_pending');return data||0;}catch(e){return 0;}},
@@ -792,11 +798,16 @@ function slotsHtml(w,editable,onlyRol,canEditSlots){
       const opts=crewUsers().filter(c=>wkPastBij(w,c)||ind[`${rol}#${i}`]===c.id).map(c=>{const ok=isApproved(c.id,w.label,rol),av=isAvail(c.id,w.id),busy=used.has(c.id)&&cur!==c.id;
         if(ok&&av&&!busy)return `<option value="${c.id}" ${cur===c.id?'selected':''}>${timesChosen(c.id)>MAX_OK?'⚠ ':''}${esc(c.naam)} · ${timesChosen(c.id)}x gekozen</option>`;
         if(cur===c.id)return `<option value="${c.id}" selected>${esc(c.naam)}</option>`;return null;}).filter(Boolean).join('');
-      return mag(rol)?`<span class="pick"><select data-slot="${key}" data-wk="${w.id}" class="${cur&&timesChosen(cur)>MAX_OK?'over':''}"><option value="">niet ingedeeld</option>${opts}</select>${cur&&overTxt(cur)?`<div class="overnote">${esc(overTxt(cur))}</div>`:''}</span>`
-        :`<span class="pick"><b class="${cur&&timesChosen(cur)>MAX_OK?'over':''}">${cur?esc(user(cur).naam):'nog open'}</b></span>`;};
+      const vk=((D.voorkeur||{})[w.id]||{})[key];const vkNaam=vk?esc(user(vk.crew)?.naam||'?'):'';
+      const vkTag=vk?`<div class="muted" style="font-size:11px">Voorkeur PL: ${vkNaam} · ${vk.status==='voorgesteld'?'wacht op coördinator':vk.status}</div>`:'';
+      if(mag(rol))return `<span class="pick"><select data-slot="${key}" data-wk="${w.id}" class="${cur&&timesChosen(cur)>MAX_OK?'over':''}"><option value="">niet ingedeeld</option>${opts}</select>${cur&&overTxt(cur)?`<div class="overnote">${esc(overTxt(cur))}</div>`:''}${vk&&vk.status==='voorgesteld'?`<div class="muted" style="font-size:12px">Voorkeur van de PL: <b>${vkNaam}</b> <button type="button" class="small" data-vkbesluit="${w.id}|${rol}|${i}|goedgekeurd">Overnemen</button> <button type="button" class="small" data-vkbesluit="${w.id}|${rol}|${i}|afgewezen">Afwijzen</button></div>`:vkTag}</span>`;
+      // PL (of GL/FL) zonder indeelrecht voor deze rol: voorkeur opgeven voor de coördinator
+      if(editable&&magSlots(w)&&!cur){const vopts=crewUsers().filter(c=>wkPastBij(w,c)&&isApproved(c.id,w.label,rol)&&isAvail(c.id,w.id)&&(!used.has(c.id)||vk?.crew===c.id)).map(c=>`<option value="${c.id}" ${vk?.crew===c.id?'selected':''}>${esc(c.naam)} · ${timesChosen(c.id)}x gekozen</option>`).join('');
+        return `<span class="pick"><select data-voorkeur="${key}" data-wk="${w.id}" title="Jouw voorkeur; de coördinator ${esc(fmtRol(rol))} beslist"><option value="">voorkeur opgeven…</option>${vopts}</select>${vk?`<div class="muted" style="font-size:11px">${vk.status==='voorgesteld'?'Wacht op de coördinator '+esc(fmtRol(rol)):vk.status==='afgewezen'?'Afgewezen door de coördinator'+(vk.notitie?': '+esc(vk.notitie):''):''}</div>`:''}</span>`;}
+      return `<span class="pick"><b class="${cur&&timesChosen(cur)>MAX_OK?'over':''}">${cur?esc(user(cur).naam):'nog open'}</b>${vkTag}</span>`;};
     const blocked=n?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!isApproved(c.id,w.label,rol)&&wil(c.id,w.label).includes(rol)).map(c=>c.naam):[];
     const cnt=canEditSlots?`<select data-slotcount="${rol}" data-wk="${w.id}" title="Aantal nodig">${Array.from({length:11},(_,k)=>`<option value="${k}" ${k===n?'selected':''}>${k}</option>`).join('')}</select>`:`<span class="muted">${n}</span>`;
-    const wie=editable&&!mag(rol)?`<div class="muted" style="font-size:11px">${PL_NIET.includes(rol)?'via coördinator '+esc(fmtRol(rol)):'via PL'}</div>`:'';
+    const wie=editable&&!mag(rol)?`<div class="muted" style="font-size:11px">${PL_NIET.includes(rol)?'coördinator '+esc(fmtRol(rol))+' deelt in; jij kunt een voorkeur opgeven':'via PL'}</div>`:'';
     const res=reserveVan(w.id,rol);
     const resKand=mag(rol)?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&isApproved(c.id,w.label,rol)&&!used.has(c.id)&&!res.includes(c.id)):[];
     const reserve=(n||res.length)&&(mag(rol)||res.length)?`<div class="reserve" style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px"><span class="muted">Reserve:</span>${res.map(c=>`<span class="tag">${esc(user(c)?.naam||c)}${mag(rol)?` <button type="button" class="x" data-resdel="${w.id}|${rol}|${c}" title="Reserve verwijderen">×</button>`:''}</span>`).join('')}${mag(rol)?`<select data-resadd="${w.id}|${rol}" class="small"><option value="">+ reserve kiezen</option>${resKand.map(c=>`<option value="${c.id}">${esc(c.naam)} · ${timesChosen(c.id)}x gekozen</option>`).join('')}</select>`:res.length?'':'<span class="muted">geen</span>'}</div>`:'';
@@ -1103,6 +1114,7 @@ document.addEventListener('click',async e=>{
   if(b.dataset.delpend){await db.deletePending(b.dataset.delpend);await refresh();return;}
   if(b.dataset.rollen){const u=user(b.dataset.rollen);const cur=rollenVan(u).join(',');const inp=prompt('Rollen voor '+u.naam+' (komma-gescheiden: crew, leider, kantoor):',cur);if(inp===null)return;const rollen=inp.split(',').map(x=>x.trim().toLowerCase()).filter(x=>['crew','leider','kantoor'].includes(x));if(!rollen.length){toast('Geen geldige rol');return;}await db.setRollen(u.id,rollen);u.rollen=rollen;await refresh();toast('Rollen bijgewerkt');return;}
   if(b.dataset.deltw){await db.deleteToewijzing(b.dataset.deltw);await refresh();toast('Toewijzing verwijderd');return;}
+  if(b.dataset.vkbesluit){const [wid,rol,plek,besluit]=b.dataset.vkbesluit.split('|');try{await db.voorkeurBesluit(wid,rol,+plek,besluit);}catch(e){return;}await refresh();toast(besluit==='goedgekeurd'?'Overgenomen in de indeling':'Voorkeur afgewezen');return;}
   if(b.dataset.resdel){const [wid,rol,crew]=b.dataset.resdel.split('|');await db.setReserve(wid,rol,crew,false);await refresh();toast('Reserve verwijderd');return;}
   if(b.dataset.aflijst){const n=afContactRijen().length;if(!n){toast('Geen personen in de lijst');return;}
     if(b.dataset.aflijst==='csv'){const blob=new Blob(['\ufeff'+afContactTekst(',')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`afgewezen-contact-${today()}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast(`CSV met ${n} personen`);}
@@ -1170,6 +1182,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.av){const on=t.checked;try{await db.setAvail(t.dataset.crew,t.dataset.av,on);}catch(err){t.checked=!on;return;}D=await db.load();
     const h=document.querySelector(`[data-avhelp="${t.dataset.av}"]`);if(h){const w=wk(t.dataset.av);const keep=h.querySelector('.avst')?.outerHTML||'';h.innerHTML=(on?letOp(w):'')+keep;}return;}
   if(t.dataset.slot){await db.setSlot(t.dataset.wk||UI.weekendView,t.dataset.slot,t.value);await refresh();return;}
+  if(t.dataset.voorkeur){const [rol,plek]=t.dataset.voorkeur.split('#');try{await db.setVoorkeur(t.dataset.wk,rol,+plek,t.value||null);}catch(e){return;}await refresh();toast(t.value?'Voorkeur doorgegeven aan de coördinator '+fmtRol(rol):'Voorkeur verwijderd');return;}
   if(t.dataset.slotcount){const w=wk(t.dataset.wk);const rol=t.dataset.slotcount;const n=+t.value;const slots={...w.slots};if(n>0)slots[rol]=n;else delete slots[rol];
     const ind=D.indeling[w.id]||{};for(const k of Object.keys(ind)){const [r,i]=k.split('#');if(r===rol&&+i>n&&ind[k])await db.setSlot(w.id,k,'');}
     await db.setSlots(w.id,slots);await refresh();toast(`${fmtRol(rol)}: ${n} nodig`);return;}
