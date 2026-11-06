@@ -383,7 +383,7 @@ function LocalStore(){
       save();},
     async deleteIntake(crew,label){S.intake=S.intake.filter(i=>!(i.crew===crew&&i.label===label));save();},
     async setStatus(g,status,door,notitie=''){const x=S.goedkeuringen.find(y=>y.crew===g.crew&&y.label===g.label&&y.rol===g.rol);x.status=status;x.door=door;x.datum=today();x.notitie=notitie;save();},
-    async addVoorstel(g){if(S.goedkeuringen.some(y=>y.crew===g.crew&&y.label===g.label&&y.rol===g.rol))return false;S.goedkeuringen.push({...g,status:g.status||'voorgesteld',bron:'kantoor',datum:today(),notitie:''});save();return true;},
+    async addVoorstel(g){const ex=S.goedkeuringen.find(y=>y.crew===g.crew&&y.label===g.label&&y.rol===g.rol);if(ex){if(ex.status==='goedgekeurd'){ex.bron='kantoor';save();return 'kiesbaar';}return false;}S.goedkeuringen.push({...g,status:g.status||'voorgesteld',bron:'kantoor',datum:today(),notitie:''});save();return true;},
     async setAvail(crew,wid,on){S.beschikbaar[crew]=S.beschikbaar[crew]||[];const i=S.beschikbaar[crew].indexOf(wid);if(on&&i<0)S.beschikbaar[crew].push(wid);if(!on&&i>=0)S.beschikbaar[crew].splice(i,1);save();},
     async setSlot(wid,key,crew){S.indeling[wid]=S.indeling[wid]||{};S.indeling[wid][key]=crew;save();},
     async saveWeekend(w){const k=S.weekends.findIndex(x=>x.id===w.id);if(k>=0)S.weekends[k]=w;else S.weekends.push(w);save();},
@@ -450,7 +450,11 @@ function SupabaseStore(client){
     async setStatus(g,status,door,notitie=''){const rows=await one(client.from('goedkeuringen').update({status,door,notitie,datum:today()}).match({crew:g.crew,label:g.label,rol:g.rol}).select('crew'));
       if(!rows||!rows.length){showErr('Screening niet opgeslagen',['De database weigert de wijziging: je bent niet gekoppeld als bewegingsleider van dit label voor deze doelgroep (man/vrouw). Kantoor koppelt bewegingsleiders onder Crewbeheer.']);throw new Error('geen rechten');}},
     async setLeider(label,veld,userId){await one(client.from('labels').update({[veld]:userId||null}).eq('id',label));},
-    async addVoorstel(g){const {error}=await client.from('goedkeuringen').insert({...g,status:g.status||'voorgesteld',bron:'kantoor',datum:today()});if(error){if(error.code==='23505')return false;toast('Fout: '+error.message);throw error;}return true;},
+    async addVoorstel(g){const {error}=await client.from('goedkeuringen').insert({...g,status:g.status||'voorgesteld',bron:'kantoor',datum:today()});
+      if(error){if(error.code==='23505'){ // bestaat al: staat hij goedgekeurd maar niet gewenst, dan alsnog kiesbaar maken (bron kantoor)
+          const rows=await one(client.from('goedkeuringen').update({bron:'kantoor',door:g.door,datum:today()}).match({crew:g.crew,label:g.label,rol:g.rol,status:'goedgekeurd'}).select('rol'));
+          return rows&&rows.length?'kiesbaar':false;}
+        toast('Fout: '+error.message);throw error;}return true;},
     async setAvail(crew,weekend,on){if(on)await one(client.from('beschikbaarheid').upsert({crew,weekend}));else await one(client.from('beschikbaarheid').delete().match({crew,weekend}));},
     async setSlot(weekend,key,crew){const [rol,plek]=key.split('#');if(crew)await one(client.from('indeling').upsert({weekend,rol,plek:+plek,crew},{onConflict:'weekend,rol,plek'}));else await one(client.from('indeling').delete().match({weekend,rol,plek:+plek}));},
     async saveWeekend(w){await one(client.from('weekends').upsert(w));},
@@ -994,7 +998,7 @@ function viewVerdeling(){
   const lijst={alle:V.slice().sort(opNaam),gekozen,over,nul}[f]||V;
   const tile=(k,v,l,cls='')=>`<button class="stat ${f===k?'on':''}" data-verd="${k}" type="button"><div class="v ${cls}">${v}</div><div class="l">${l}</div></button>`;
   const magRol=l=>isKantoor()||(isLeider()&&myLabels().includes(l));
-  const rolAdd=(v,label)=>magRol(label)&&!zonderRollen(label)?`<select data-roladd="${v.id}|${label}" class="small" title="Rol toevoegen voor dit crewlid"><option value="">+ rol toevoegen</option>${M.rollen.filter(r=>!G(v.id,label).some(g=>g.rol===r)).map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select>`:'';
+  const rolAdd=(v,label)=>magRol(label)&&!zonderRollen(label)?`<select data-roladd="${v.id}|${label}" class="small" title="Rol toevoegen voor dit crewlid"><option value="">+ rol toevoegen</option>${M.rollen.filter(r=>!isApproved(v.id,label,r)&&!openRoles(v.id,label).includes(r)).map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select>`:'';
   const statusSel=(v,label)=>`<select data-cstatus="${v.id}" data-clabel="${label}" class="small"><option value="">– status –</option>${Object.entries(STATUS_TXT).map(([k,t])=>`<option value="${k}" ${v.status[label]===k?'selected':''}>${t}</option>`).join('')}</select> ${rolAdd(v,label)}`;
   const row=v=>`<tr><td class="name ${v.n>MAX_OK?'over':''}">${esc(v.naam)}</td><td class="right ${v.n>MAX_OK?'over':''}">${v.n}${v.reserve.length?` <span class="muted" title="reserve">+${v.reserve.length}r</span>`:''}</td><td>${esc(v.waar.map(x=>`${x.naam} (${fmtRol(x.rol)})`).join(', '))}${v.reserve.length?`<div class="muted" style="font-size:12px">Reserve: ${esc(v.reserve.map(x=>`${x.naam} (${fmtRol(x.rol)})`).join(', '))}</div>`:''}</td><td class="right">${v.beschikbaar.length}</td></tr>`;
   const nulRow=v=>{const labels=[...new Set(v.beschikbaar.map(b=>b.label))];
@@ -1076,7 +1080,7 @@ document.addEventListener('click',async e=>{
     clearErr();try{if(b.dataset.ok){await db.setStatus({crew,label,rol},'goedgekeurd',me.id);toast(`${user(crew).naam} goedgekeurd: ${lbl(label).naam} · ${fmtRol(rol)}`);}
     else{const n=prompt('Reden (intern):','')??null;if(n===null)return;await db.setStatus({crew,label,rol},'afgewezen',me.id,n);toast('Afgewezen');}}catch(err){return;}
     await refresh();return;}
-  if(b.id==='nvAdd'){const cu=user(nvCrew.value);if(!labelsVoor(cu).some(l=>l.id===nvLabel.value)){toast(`${lbl(nvLabel.value).naam} is niet beschikbaar voor dit crewlid`);return;}const st=document.getElementById('nvStatus')?.value||'voorgesteld';const ok=await db.addVoorstel({crew:nvCrew.value,label:nvLabel.value,rol:nvRol.value,door:me.id,status:st});toast(ok?(st==='goedgekeurd'?'Rol toegevoegd en goedgekeurd':'Voorstel toegevoegd'):'Bestaat al');await refresh();return;}
+  if(b.id==='nvAdd'){const cu=user(nvCrew.value);if(!labelsVoor(cu).some(l=>l.id===nvLabel.value)){toast(`${lbl(nvLabel.value).naam} is niet beschikbaar voor dit crewlid`);return;}const st=document.getElementById('nvStatus')?.value||'voorgesteld';const ok=await db.addVoorstel({crew:nvCrew.value,label:nvLabel.value,rol:nvRol.value,door:me.id,status:st});toast(ok==='kiesbaar'?'Rol was al goedgekeurd (ervaring) en is nu ook kiesbaar':ok?(st==='goedgekeurd'?'Rol toegevoegd en goedgekeurd':'Voorstel toegevoegd'):'Bestaat al');await refresh();return;}
   if(b.id==='saveAll'){clearErr();const box=document.querySelector('.intake');if(!box)return;const val=f=>[...box.querySelectorAll(`[data-f="${f}"]:checked`)].map(x=>x.value);
     const fouten=[];
     if(!isCrew())fouten.push('Je account staat niet als crew ingesteld; alleen crew kan een inzet opgeven. Vraag kantoor om je rollen aan te passen.');
@@ -1168,7 +1172,7 @@ document.addEventListener('submit',async e=>{
 document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.id==='afAlleenZonder'){UI.afAlleenZonder=t.checked;document.getElementById('afLijstN').textContent=afContactRijen().length+' personen';return;}
-  if(t.dataset.roladd){const [crew,label]=t.dataset.roladd.split('|');if(!t.value)return;const ok=await db.addVoorstel({crew,label,rol:t.value,door:me.id,status:isLeider()&&!isKantoor()?'goedgekeurd':'voorgesteld'});toast(ok?(isLeider()&&!isKantoor()?'Rol toegevoegd en goedgekeurd':'Rol voorgesteld, bewegingsleider beoordeelt'):'Bestaat al');await refresh();return;}
+  if(t.dataset.roladd){const [crew,label]=t.dataset.roladd.split('|');if(!t.value)return;const ok=await db.addVoorstel({crew,label,rol:t.value,door:me.id,status:isLeider()&&!isKantoor()?'goedgekeurd':'voorgesteld'});toast(ok==='kiesbaar'?'Rol was al goedgekeurd (ervaring) en is nu ook kiesbaar':ok?(isLeider()&&!isKantoor()?'Rol toegevoegd en goedgekeurd':'Rol voorgesteld, bewegingsleider beoordeelt'):'Bestaat al');await refresh();return;}
   if(t.dataset.cstatus){try{await db.setCrewStatus(t.dataset.cstatus,t.dataset.clabel,t.value||null);}catch(err){return;}await refresh();toast(t.value?'Status: '+STATUS_TXT[t.value]:'Status gewist');return;}
   if(t.dataset.resadd){const [wid,rol]=t.dataset.resadd.split('|');if(!t.value)return;try{await db.setReserve(wid,rol,t.value,true);}catch(err){return;}await refresh();toast('Reserve toegevoegd');return;}
   if(t.id==='who'){me=user(t.value);UI.step=null;await render();return;}
