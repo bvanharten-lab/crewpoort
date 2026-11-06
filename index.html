@@ -810,7 +810,7 @@ function slotsHtml(w,editable,onlyRol,canEditSlots){
         return `<span class="pick"><select data-voorkeur="${key}" data-wk="${w.id}" title="Jouw voorkeur; de coördinator ${esc(fmtRol(rol))} beslist"><option value="">voorkeur opgeven…</option>${vopts}</select>${vk?`<div class="muted" style="font-size:11px">${vk.status==='voorgesteld'?'Wacht op de coördinator '+esc(fmtRol(rol)):vk.status==='afgewezen'?'Afgewezen door de coördinator'+(vk.notitie?': '+esc(vk.notitie):''):''}</div>`:''}</span>`;}
       return `<span class="pick"><b class="${cur&&timesChosen(cur)>MAX_OK?'over':''}">${cur?esc(user(cur).naam):'nog open'}</b>${vkTag}</span>`;};
     const blocked=n?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!isApproved(c.id,w.label,rol)&&wil(c.id,w.label).includes(rol)).map(c=>c.naam):[];
-    const cnt=canEditSlots?`<select data-slotcount="${rol}" data-wk="${w.id}" title="Aantal nodig">${Array.from({length:11},(_,k)=>`<option value="${k}" ${k===n?'selected':''}>${k}</option>`).join('')}</select>`:`<span class="muted">${n}</span>`;
+    const cnt=canEditSlots?`<select data-slotcount="${rol}" data-wk="${w.id}" title="Aantal nodig">${Array.from({length:Math.max(31,n+1)},(_,k)=>`<option value="${k}" ${k===n?'selected':''}>${k}</option>`).join('')}</select>`:`<span class="muted">${n}</span>`;
     const wie=editable&&!mag(rol)?`<div class="muted" style="font-size:11px">${PL_NIET.includes(rol)?'coördinator '+esc(fmtRol(rol))+' deelt in; jij kunt een voorkeur opgeven':'via PL'}</div>`:'';
     const res=reserveVan(w.id,rol);
     const resKand=mag(rol)?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&isApproved(c.id,w.label,rol)&&!used.has(c.id)&&!res.includes(c.id)):[];
