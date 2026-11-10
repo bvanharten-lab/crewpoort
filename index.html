@@ -831,6 +831,21 @@ function slotsHtml(w,editable,onlyRol,canEditSlots){
     return `<div class="slotrow"><div class="r">${esc(fmtRol(rol))}${wie}</div><div class="cnt">${cnt}</div><div class="picks">${Array.from({length:n},(_,i)=>sel(i+1)).join('')}${!n&&canEditSlots?'<span class="muted" style="font-size:12px;align-self:center">niet nodig</span>':''}${blocked.length?`<div class="muted" style="font-size:12px;flex-basis:100%">Beschikbaar, maar voor ${esc(fmtRol(rol))} nog te beoordelen door de bewegingsleider: ${blocked.map(esc).join(', ')}</div>`:''}${reserve}</div></div>`;}).join('');
 }
 
+/* Alleen kantoor: beschikbaarheid van een crewlid voor dit weekend aanzetten (of intrekken) als het bij het invullen misging. */
+function beschBeheer(w){
+  if(!isKantoor())return '';
+  const past=crewUsers().filter(c=>wkPastBij(w,c));
+  const ingedeeld=new Set(Object.values(D.indeling[w.id]||{}).filter(Boolean));
+  const kan=past.filter(c=>!isAvail(c.id,w.id)&&intakeOf(c.id,w.label)&&medischBekend(c.id));
+  const kanNiet=past.filter(c=>!isAvail(c.id,w.id)&&!(intakeOf(c.id,w.label)&&medischBekend(c.id))).length;
+  const weg=past.filter(c=>isAvail(c.id,w.id)&&!ingedeeld.has(c.id));
+  const opt=a=>a.map(c=>`<option value="${c.id}">${esc(c.naam)}</option>`).join('');
+  return `<details style="margin-top:18px" ${UI.bbOpen?'open':''}><summary><b>Beschikbaarheid aanpassen</b> <span class="muted">(alleen kantoor · ${past.filter(c=>isAvail(c.id,w.id)).length} beschikbaar)</span></summary>
+    <p class="muted" style="margin-top:8px">Voor als er bij het invullen iets misging. Kan alleen voor wie ${esc(lbl(w.label)?.naam)} heeft gekozen bij stap 3 en medische gegevens heeft ingevuld${kanNiet?` (${kanNiet} ${kanNiet===1?'persoon valt':'personen vallen'} daardoor af)`:''}. Het crewlid ziet het weekend daarna als aangevinkt in zijn eigen overzicht.</p>
+    <div class="tools"><select id="bbAdd"><option value="">crewlid kiezen…</option>${opt(kan)}</select><button class="small primary" data-bbadd="${w.id}">Beschikbaar maken</button>
+      <select id="bbDel" style="margin-left:16px"><option value="">crewlid kiezen…</option>${opt(weg)}</select><button class="small" data-bbdel="${w.id}">Beschikbaarheid intrekken</button></div>
+    <p class="muted" style="font-size:12px">Intrekken kan alleen voor wie nog niet is ingedeeld op dit weekend.</p></details>`;
+}
 function viewIndeling(){
   const labels=myLabels();const wks=D.weekends.filter(w=>labels.includes(w.label));
   const w=wk(UI.weekendView)&&labels.includes(wk(UI.weekendView).label)?wk(UI.weekendView):wks[0];if(!w)return '<div class="band"></div><section class="panel"><h2>Indeling</h2><div class="body"><p class="muted">Geen weekenden.</p></div></section>';UI.weekendView=w.id;
@@ -838,7 +853,7 @@ function viewIndeling(){
   const toew=D.toewijzingen.filter(t=>t.soort==='weekend'&&t.weekend===w.id).map(t=>`${user(t.user)?.naam} (${t.functie})`);
   return `<div class="band"></div><section class="panel"><h2>Indeling</h2><div class="body">
     <div class="tools"><select id="wkSel">${wks.map(x=>`<option value="${x.id}" ${x.id===w.id?'selected':''}>${esc(lbl(x.label).naam)} · ${esc(x.naam)} (${esc(x.datum)})</option>`).join('')}</select>${zonderRollen(w.label)?'':`<span class="muted">${Object.values(ind).filter(Boolean).length}/${n} gevuld</span>`}</div>
-    <p class="muted">${letOp(w)}${toew.length?'Leiding: '+esc(toew.join(', '))+'. ':''}Voor ${fmtVoor(w)}. ${zonderRollen(w.label)?'':'Links de rol, dan hoeveel je nodig hebt, dan per plek de beschikbare en gescreende crew.'}</p>${zonderRollen(w.label)?beschikbaarLijst(w):`<div>${slotsHtml(w,true,null,isKantoor())}</div>${exportKnop(w)}`}</div></section>`;
+    <p class="muted">${letOp(w)}${toew.length?'Leiding: '+esc(toew.join(', '))+'. ':''}Voor ${fmtVoor(w)}. ${zonderRollen(w.label)?'':'Links de rol, dan hoeveel je nodig hebt, dan per plek de beschikbare en gescreende crew.'}</p>${zonderRollen(w.label)?beschikbaarLijst(w):`<div>${slotsHtml(w,true,null,isKantoor())}</div>${exportKnop(w)}`}${beschBeheer(w)}</div></section>`;
 }
 
 function viewAanmeldingen(){
@@ -1133,6 +1148,9 @@ document.addEventListener('click',async e=>{
   if(b.dataset.deltw){await db.deleteToewijzing(b.dataset.deltw);await refresh();toast('Toewijzing verwijderd');return;}
   if(b.dataset.vkbesluit){const [wid,rol,plek,besluit]=b.dataset.vkbesluit.split('|');try{await db.voorkeurBesluit(wid,rol,+plek,besluit);}catch(e){return;}await refresh();toast(besluit==='goedgekeurd'?'Overgenomen in de indeling':'Voorkeur afgewezen');return;}
   if(b.dataset.resdel){const [wid,rol,crew]=b.dataset.resdel.split('|');await db.setReserve(wid,rol,crew,false);await refresh();toast('Reserve verwijderd');return;}
+  if(b.dataset.bbadd||b.dataset.bbdel){const add=!!b.dataset.bbadd;const wid=b.dataset.bbadd||b.dataset.bbdel;const c=document.getElementById(add?'bbAdd':'bbDel').value;if(!c){toast('Kies eerst een crewlid');return;}
+    if(!add&&!confirm(`Beschikbaarheid van ${user(c)?.naam} voor ${wk(wid)?.naam} intrekken?`))return;
+    UI.bbOpen=true;try{await db.setAvail(c,wid,add);}catch(e){return;}await refresh();toast(add?`${user(c)?.naam} is beschikbaar voor ${wk(wid)?.naam}`:'Beschikbaarheid ingetrokken');return;}
   if(b.dataset.scrreset){UI.scr={g:'',l:'',r:'',s:''};await render();return;}
   if(b.dataset.aflijst){const n=afContactRijen().length;if(!n){toast('Geen personen in de lijst');return;}
     if(b.dataset.aflijst==='csv'){const blob=new Blob(['\ufeff'+afContactTekst(',')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`afgewezen-contact-${today()}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast(`CSV met ${n} personen`);}
