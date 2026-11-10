@@ -590,8 +590,14 @@ function viewGoedkeuring(){
   const labels=screenLabels();
   const mine=D.goedkeuringen.filter(g=>labels.includes(g.label)&&screenDoorMij(g.crew,g.label));
   const cnt=st=>mine.filter(g=>g.status===st).length;
-  const rows=crewUsers().filter(c=>mine.some(g=>g.crew===c.id)||D.intake.some(i=>i.crew===c.id&&labels.includes(i.label)&&screenDoorMij(c.id,i.label))).sort((a,b)=>(a.naam||'').localeCompare(b.naam||'','nl',{sensitivity:'base'})).map(c=>{
-    const per=labels.filter(l=>screenDoorMij(c.id,l)&&(mine.some(g=>g.crew===c.id&&g.label===l)||intakeOf(c.id,l))).map(l=>{
+  // Filters: man/vrouw, label, rol, status. Een label-regel blijft staan als er een rol in zit die aan rol+status voldoet.
+  const F=UI.scr=UI.scr||{g:'',l:'',r:'',s:''};
+  const labelsF=labels.filter(l=>!F.l||l===F.l);
+  const rolFilter=!!(F.r||F.s);
+  const past=(c,l)=>screenDoorMij(c.id,l)&&(rolFilter?mine.some(g=>g.crew===c.id&&g.label===l&&(!F.r||g.rol===F.r)&&(!F.s||g.status===F.s)):(mine.some(g=>g.crew===c.id&&g.label===l)||!!intakeOf(c.id,l)));
+  const lijst=crewUsers().filter(c=>(!F.g||c.geslacht===F.g)&&labelsF.some(l=>past(c,l)));
+  const rows=lijst.map(c=>{
+    const per=labelsF.filter(l=>past(c,l)).map(l=>{
       const i=intakeOf(c.id,l);
       const chips=mine.filter(g=>g.crew===c.id&&g.label===l).map(g=>chip(g,isLeider())).join('');
       return `<div style="margin-bottom:8px"><span class="tag lbl">${esc(lbl(l).naam)}</span> <span class="muted" style="font-size:12px">${i?esc(fmtErv(i.ervaring)):'geen intake'}</span> <span class="chips">${chips}</span></div>`;
@@ -614,7 +620,14 @@ function viewGoedkeuring(){
       <div class="stat"><div class="v">${crewUsers().filter(c=>D.weekends.some(w=>labels.includes(w.label)&&isAvail(c.id,w.id))&&!labels.some(l=>approvedRoles(c.id,l).length)).length}</div><div class="l">beschikbaar, nog niet kiesbaar</div></div>
     </div>
     ${add}
-    <div class="tw"><table><thead><tr><th>Crewlid</th><th>Intake en beslissingen</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="muted">Nog geen intake of voorstellen.</td></tr>'}</tbody></table></div>
+    <div class="tools" style="margin-top:14px"><span class="muted">Filter:</span>
+      <select data-scr="g"><option value="">man en vrouw</option><option value="M" ${F.g==='M'?'selected':''}>mannen</option><option value="V" ${F.g==='V'?'selected':''}>vrouwen</option></select>
+      <select data-scr="l"><option value="">alle labels</option>${labels.map(l=>`<option value="${l}" ${F.l===l?'selected':''}>${esc(lbl(l).naam)}</option>`).join('')}</select>
+      <select data-scr="r"><option value="">alle rollen</option>${M.rollen.map(r=>`<option value="${r}" ${F.r===r?'selected':''}>${fmtRol(r)}</option>`).join('')}</select>
+      <select data-scr="s"><option value="">elke status</option><option value="voorgesteld" ${F.s==='voorgesteld'?'selected':''}>te beoordelen</option><option value="goedgekeurd" ${F.s==='goedgekeurd'?'selected':''}>goedgekeurd</option><option value="afgewezen" ${F.s==='afgewezen'?'selected':''}>afgewezen</option></select>
+      ${F.g||F.l||F.r||F.s?'<button class="small" data-scrreset="1">Wis filters</button>':''}
+      <span class="muted">${lijst.length} ${lijst.length===1?'persoon':'personen'}</span></div>
+    <div class="tw"><table><thead><tr><th>Crewlid</th><th>Intake en beslissingen</th></tr></thead><tbody>${rows||`<tr><td colspan="2" class="muted">${F.g||F.l||F.r||F.s?'Niemand voldoet aan dit filter.':'Nog geen intake of voorstellen.'}</td></tr>`}</tbody></table></div>
     <p class="note" style="margin-top:12px">Niet zichtbaar hier: mail, telefoon. Afwijs-notities gaan nooit mee naar de exportsheet.</p></div></section>
     ${ervarenPerFunctie(mine)}${afgewezenOverzicht(mine)}`;
 }
@@ -1120,6 +1133,7 @@ document.addEventListener('click',async e=>{
   if(b.dataset.deltw){await db.deleteToewijzing(b.dataset.deltw);await refresh();toast('Toewijzing verwijderd');return;}
   if(b.dataset.vkbesluit){const [wid,rol,plek,besluit]=b.dataset.vkbesluit.split('|');try{await db.voorkeurBesluit(wid,rol,+plek,besluit);}catch(e){return;}await refresh();toast(besluit==='goedgekeurd'?'Overgenomen in de indeling':'Voorkeur afgewezen');return;}
   if(b.dataset.resdel){const [wid,rol,crew]=b.dataset.resdel.split('|');await db.setReserve(wid,rol,crew,false);await refresh();toast('Reserve verwijderd');return;}
+  if(b.dataset.scrreset){UI.scr={g:'',l:'',r:'',s:''};await render();return;}
   if(b.dataset.aflijst){const n=afContactRijen().length;if(!n){toast('Geen personen in de lijst');return;}
     if(b.dataset.aflijst==='csv'){const blob=new Blob(['\ufeff'+afContactTekst(',')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`afgewezen-contact-${today()}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast(`CSV met ${n} personen`);}
     else{try{await navigator.clipboard.writeText(afContactTekst('\t'));toast(`${n} personen gekopieerd`);}catch(e){showErr('Kopiëren lukt niet',['Gebruik Download CSV.']);}}
@@ -1171,6 +1185,7 @@ document.addEventListener('submit',async e=>{
 });
 document.addEventListener('change',async e=>{
   const t=e.target;
+  if(t.dataset.scr){(UI.scr=UI.scr||{})[t.dataset.scr]=t.value;await render();return;}
   if(t.id==='afAlleenZonder'){UI.afAlleenZonder=t.checked;document.getElementById('afLijstN').textContent=afContactRijen().length+' personen';return;}
   if(t.dataset.roladd){const [crew,label]=t.dataset.roladd.split('|');if(!t.value)return;const ok=await db.addVoorstel({crew,label,rol:t.value,door:me.id,status:isLeider()&&!isKantoor()?'goedgekeurd':'voorgesteld'});toast(ok==='kiesbaar'?'Rol was al goedgekeurd (ervaring) en is nu ook kiesbaar':ok?(isLeider()&&!isKantoor()?'Rol toegevoegd en goedgekeurd':'Rol voorgesteld, bewegingsleider beoordeelt'):'Bestaat al');await refresh();return;}
   if(t.dataset.cstatus){try{await db.setCrewStatus(t.dataset.cstatus,t.dataset.clabel,t.value||null);}catch(err){return;}await refresh();toast(t.value?'Status: '+STATUS_TXT[t.value]:'Status gewist');return;}
