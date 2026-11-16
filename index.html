@@ -578,7 +578,7 @@ function stepsFor(){
   if(isCrew()){s.push(['account','1 · Gegevens'],['medisch','2 · Medisch'],['profiel','3 · Inzet'],['uitvraag','4 · Beschikbaarheid'],['klaar','5 · Klaar']);if(myToew().length){const ws=[...new Set(myToew().filter(t=>t.soort==='weekend').map(t=>t.weekend))];s.push(['aanmeldingen',ws.length===1&&wk(ws[0])?'★ '+wk(ws[0]).naam:ws.length>1?'★ Mijn weekenden':'★ Mijn crew']);}}
   if(isKantoor()||isLeider())s.push(['voortgang','Voortgang'],['goedkeuring','Screening'],['potentieel','Potentieel'],['indeling','Indeling'],['export','Exportsheet']);
   else if(coordScreenLabels().length)s.push(['goedkeuring','Screening'],['potentieel','Potentieel']);
-  if(isKantoor()||isLeider()||coordLabels().length||myToew().some(t=>t.functie==='PL'))s.push(['verdeling','Verdeling']);
+  if(isKantoor()||isLeider()||coordLabels().length||myToew().some(t=>t.functie==='PL'||(t.soort==='rol'&&t.rol)))s.push(['verdeling','Verdeling']);
   if(isKantoor())s.push(['weekenden','Weekenden'],['toewijzingen','Toewijzingen'],['crewbeheer','Crew'],['model','Model']);
   return s;
 }
@@ -1030,7 +1030,13 @@ function viewKlaar(){
   </div></section>`;
 }
 function viewVerdeling(){
-  const scope=verdLabels();
+  // Rol-weergave: coördinator van een rol ziet alleen zijn rol(len); wie breder toegang heeft kan per rol filteren.
+  const breed=isKantoor()||isLeider()||coordLabels().length>0||myToew().some(t=>t.functie==='PL');
+  const rolToew=myToew().filter(t=>t.soort==='rol'&&t.rol);
+  const rolOpties=breed?['',...M.rollen]:[...new Set(rolToew.map(t=>t.rol))];
+  const R=rolOpties.includes(UI.verdRol)?UI.verdRol:rolOpties[0]||'';
+  const rolLabels=r=>{const ts=rolToew.filter(t=>t.rol===r);return ts.some(t=>!t.label)?M.labels.map(l=>l.id):ts.map(t=>t.label);};
+  const scope=[...new Set([...(breed?verdLabels():[]),...(R?rolLabels(R):[])])].filter(l=>!R||!zonderRollen(l));
   const fallback=()=>crewUsers().map(c=>({id:c.id,naam:c.naam,
     waar:Object.entries(D.indeling).flatMap(([wid,slots])=>Object.entries(slots).filter(([k,v])=>v===c.id).map(([k])=>{const w=wk(wid);return w?{weekend:wid,naam:w.naam,label:w.label,rol:k.split('#')[0]}:null;})).filter(Boolean),
     reserve:Object.entries(D.reserve||{}).flatMap(([wid,r])=>Object.entries(r).filter(([rol,a])=>a.includes(c.id)).map(([rol])=>{const w=wk(wid);return w?{weekend:wid,naam:w.naam,label:w.label,rol}:null;})).filter(Boolean),
@@ -1039,7 +1045,9 @@ function viewVerdeling(){
   const raw=D.verdeling&&D.verdeling.length&&typeof (D.verdeling[0].waar||[])[0]!=='string'?D.verdeling:fallback();
   // Beperk tot de labels die jij mag zien
   const V=raw.map(v=>{const waar=(v.waar||[]).filter(x=>scope.includes(x.label));const res=(v.reserve||[]).filter(x=>scope.includes(x.label));const b=(v.beschikbaar||[]).filter(x=>scope.includes(x.label));
-    return {...v,waar,reserve:res,beschikbaar:b,n:waar.length,status:v.status||{}};}).filter(v=>v.beschikbaar.length);
+    if(R){const bR=b.filter(x=>isApproved(v.id,x.label,R));const wR=waar.filter(x=>x.rol===R);
+      return {...v,waar:wR,reserve:res.filter(x=>x.rol===R),beschikbaar:bR,n:wR.length,totaal:waar.length,status:v.status||{}};}
+    return {...v,waar,reserve:res,beschikbaar:b,n:waar.length,totaal:waar.length,status:v.status||{}};}).filter(v=>v.beschikbaar.length||(R&&v.n));
   const gekozen=V.filter(v=>v.n>0).sort(opNaam);
   const over=gekozen.filter(v=>v.n>MAX_OK);
   const nul=V.filter(v=>v.n===0).sort(opNaam);
@@ -1048,15 +1056,19 @@ function viewVerdeling(){
   const tile=(k,v,l,cls='')=>`<button class="stat ${f===k?'on':''}" data-verd="${k}" type="button"><div class="v ${cls}">${v}</div><div class="l">${l}</div></button>`;
   const magRol=l=>isKantoor()||(isLeider()&&myLabels().includes(l))||coordScreenLabels().includes(l);
   const rolAdd=(v,label)=>magRol(label)&&!zonderRollen(label)?`<select data-roladd="${v.id}|${label}" class="small" title="Rol toevoegen voor dit crewlid"><option value="">+ rol toevoegen</option>${M.rollen.filter(r=>!isApproved(v.id,label,r)&&!openRoles(v.id,label).includes(r)).map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select>`:'';
-  const statusSel=(v,label)=>`<select data-cstatus="${v.id}" data-clabel="${label}" class="small"><option value="">– status –</option>${Object.entries(STATUS_TXT).map(([k,t])=>`<option value="${k}" ${v.status[label]===k?'selected':''}>${t}</option>`).join('')}</select> ${rolAdd(v,label)}`;
+  const magStatus=l=>isKantoor()||(isLeider()&&myLabels().includes(l))||coordLabels().includes(l)||myToew().some(t=>t.soort==='weekend'&&t.functie==='PL'&&wk(t.weekend)?.label===l);
+  const rolRow=v=>`<tr><td class="name ${v.n>MAX_OK?'over':''}">${esc(v.naam)}</td><td class="right ${v.n>MAX_OK?'over':''}">${v.n}${v.reserve.length?` <span class="muted" title="reserve">+${v.reserve.length}r</span>`:''}</td><td>${esc(v.waar.map(x=>x.naam).join(', '))||'<span class="muted">nog niet ingezet</span>'}${v.reserve.length?`<div class="muted" style="font-size:12px">Reserve: ${esc(v.reserve.map(x=>x.naam).join(', '))}</div>`:''}</td><td class="right ${v.totaal>MAX_OK?'over':''}">${v.totaal}</td><td>${v.beschikbaar.length?`<b>${v.beschikbaar.length}×</b> <span class="muted" style="font-size:12px">${esc(v.beschikbaar.map(x=>x.naam).join(', '))}</span>`:'<span class="muted">–</span>'}</td></tr>`;
+  const statusSel=(v,label)=>!magStatus(label)?'<span class="muted">–</span>':`<select data-cstatus=""${v.id}" data-clabel="${label}" class="small"><option value="">– status –</option>${Object.entries(STATUS_TXT).map(([k,t])=>`<option value="${k}" ${v.status[label]===k?'selected':''}>${t}</option>`).join('')}</select> ${rolAdd(v,label)}`;
   const row=v=>`<tr><td class="name ${v.n>MAX_OK?'over':''}">${esc(v.naam)}</td><td class="right ${v.n>MAX_OK?'over':''}">${v.n}${v.reserve.length?` <span class="muted" title="reserve">+${v.reserve.length}r</span>`:''}</td><td>${esc(v.waar.map(x=>`${x.naam} (${fmtRol(x.rol)})`).join(', '))}${v.reserve.length?`<div class="muted" style="font-size:12px">Reserve: ${esc(v.reserve.map(x=>`${x.naam} (${fmtRol(x.rol)})`).join(', '))}</div>`:''}</td><td class="right">${v.beschikbaar.length}</td></tr>`;
   const nulRow=v=>{const labels=[...new Set(v.beschikbaar.map(b=>b.label))];
     return `<tr><td class="name">${esc(v.naam)}</td><td>${v.beschikbaar.map(b=>`${esc(b.naam)}${' <span class="muted">('+rollenTekst(v.id,b.label)+')</span>'}`).join('<br>')}</td><td>${labels.map(l=>`<div style="margin-bottom:4px"><span class="muted" style="font-size:12px">${esc(lbl(l)?.naam||l)}</span><br>${statusSel(v,l)}</div>`).join('')}</td></tr>`;};
   const scopeTxt=isKantoor()?'alle labels':scope.map(l=>lbl(l)?.naam).filter(Boolean).join(', ')||'geen label';
   return `<div class="band"></div><section class="panel"><h2>Verdeling <span class="muted" style="font-size:14px;text-transform:none;letter-spacing:0">· ${esc(scopeTxt)}</span></h2><div class="body">
     <p class="muted">Hoe vaak is iedereen gekozen, over de weekenden van ${isKantoor()?'alle labels':'jouw label(s)'} heen. Vaker dan ${MAX_OK}x staat oranje. Klik op een cijfer om te filteren. Doel: niemand 10x, niemand 0x.</p>
-    <div class="stats">${tile('alle',V.length,'beschikbaar gesteld')}${tile('gekozen',gekozen.length,'minstens 1x gekozen')}${tile('over',over.length,`vaker dan ${MAX_OK}x`,over.length?'over':'')}${tile('nul',nul.length,'nog 0x gekozen')}</div>
-    ${f==='nul'?`<p class="muted" style="margin-top:12px">Wel beschikbaar, nog nergens ingedeeld. Tussen haakjes de gescreende rollen voor dat label. Geef per label een status: <b>Nog een plek geven</b> (zoek nog een plek), <b>Onder review</b> (eerst overleg) of <b>Ongeschikt</b> (dit jaar niet). De status is alleen zichtbaar voor kantoor, bewegingsleiders en projectleiders. Met <b>+ rol toevoegen</b> geef je iemand een rol die hij zelf niet heeft opgegeven (bewegingsleider: direct goedgekeurd; kantoor: als voorstel).</p>
+    ${rolOpties.length>1||R?`<div class="tools"><span class="muted">Rol:</span>${rolOpties.length>1?`<select data-verdrol="1">${rolOpties.map(r=>`<option value="${r}" ${r===R?'selected':''}>${r?fmtRol(r):'alle rollen'}</option>`).join('')}</select>`:`<b>${esc(fmtRol(R))}</b>`}${R?`<span class="muted">Alleen wie voor ${esc(fmtRol(R))} is goedgekeurd en zich beschikbaar heeft gesteld. "Ingezet" telt alleen deze rol; "totaal" telt alle rollen bij elkaar.</span>`:''}</div>`:''}
+    <div class="stats">${tile('alle',V.length,R?'beschikbaar als '+esc(fmtRol(R)):'beschikbaar gesteld')}${tile('gekozen',gekozen.length,'minstens 1x gekozen')}${tile('over',over.length,`vaker dan ${MAX_OK}x`,over.length?'over':'')}${tile('nul',nul.length,'nog 0x gekozen')}</div>
+    ${R?`<div class="tw"><table><thead><tr><th>Naam</th><th class="right">Ingezet als ${esc(fmtRol(R))}</th><th>Waar</th><th class="right">Totaal</th><th>Beschikbaar voor</th></tr></thead><tbody>${lijst.map(rolRow).join('')||`<tr><td colspan="5" class="muted">${f==='alle'?'Nog niemand beschikbaar en goedgekeurd voor deze rol.':'Niemand in deze selectie.'}</td></tr>`}</tbody></table></div>`
+    :f==='nul'?`<p class="muted" style="margin-top:12px">Wel beschikbaar, nog nergens ingedeeld. Tussen haakjes de gescreende rollen voor dat label. Geef per label een status: <b>Nog een plek geven</b> (zoek nog een plek), <b>Onder review</b> (eerst overleg) of <b>Ongeschikt</b> (dit jaar niet). De status is alleen zichtbaar voor kantoor, bewegingsleiders en projectleiders. Met <b>+ rol toevoegen</b> geef je iemand een rol die hij zelf niet heeft opgegeven (bewegingsleider: direct goedgekeurd; kantoor: als voorstel).</p>
     <div class="tw"><table><thead><tr><th>Naam</th><th>Beschikbaar voor</th><th>Status per label</th></tr></thead><tbody>${nul.map(nulRow).join('')||'<tr><td colspan="3" class="muted">Iedereen die beschikbaar is, is minstens één keer gekozen.</td></tr>'}</tbody></table></div>`
     :`<div class="tw"><table><thead><tr><th>Naam</th><th class="right">Gekozen</th><th>Waar</th><th class="right">Beschikbaar voor</th></tr></thead><tbody>${lijst.map(row).join('')||`<tr><td colspan="4" class="muted">${f==='over'?'Niemand is vaker dan '+MAX_OK+'x gekozen.':'Nog niemand ingedeeld.'}</td></tr>`}</tbody></table></div>`}
   </div></section>`;
@@ -1242,6 +1254,7 @@ document.addEventListener('submit',async e=>{
 document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.dataset.coordscr){try{await db.setCoordScreent(t.dataset.coordscr,t.checked);}catch(e){return;}const l=lbl(t.dataset.coordscr);if(l)l.coord_screent=t.checked;await refresh();toast(t.checked?'Coördinatoren van '+l.naam+' screenen mee':'Coördinatoren van '+l.naam+' screenen niet meer mee');return;}
+  if(t.dataset.verdrol){UI.verdRol=t.value;await render();return;}
   if(t.dataset.scr){(UI.scr=UI.scr||{})[t.dataset.scr]=t.value;await render();return;}
   if(t.id==='afAlleenZonder'){UI.afAlleenZonder=t.checked;document.getElementById('afLijstN').textContent=afContactRijen().length+' personen';return;}
   if(t.dataset.roladd){const [crew,label]=t.dataset.roladd.split('|');if(!t.value)return;const ok=await db.addVoorstel({crew,label,rol:t.value,door:me.id,status:!isKantoor()?'goedgekeurd':'voorgesteld'});toast(ok==='kiesbaar'?'Rol was al goedgekeurd (ervaring) en is nu ook kiesbaar':ok?(!isKantoor()?'Rol toegevoegd en goedgekeurd':'Rol voorgesteld, bewegingsleider beoordeelt'):'Bestaat al');await refresh();return;}
