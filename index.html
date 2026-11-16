@@ -398,6 +398,8 @@ function LocalStore(){
     async setLeider(label,veld,userId){const l=DEMO.labels.find(x=>x.id===label);l[veld]=userId||null;},
     async deleteToewijzing(id){S.toewijzingen=S.toewijzingen.filter(t=>t.id!==id);save();},
     async addToewijzingPending(t){(S.twPending=S.twPending||[]).push(t);save();},
+    async setNotitie(crew,tekst){S.notities=(S.notities||[]).filter(n=>n.crew!==crew);if(tekst)S.notities.push({crew,tekst,door:me.id});save();},
+    async setOpen(open){S.open=open;save();},
     async setVoorkeur(wid,rol,plek,crew){S.voorkeur=S.voorkeur||{};const r=(S.voorkeur[wid]=S.voorkeur[wid]||{});if(crew)r[`${rol}#${plek}`]={weekend:wid,rol,plek,crew,door:me.id,status:'voorgesteld',notitie:''};else delete r[`${rol}#${plek}`];save();},
     async voorkeurBesluit(wid,rol,plek,besluit){const v=((S.voorkeur||{})[wid]||{})[`${rol}#${plek}`];if(!v)return;v.status=besluit;if(besluit==='goedgekeurd'){S.indeling[wid]=S.indeling[wid]||{};S.indeling[wid][`${rol}#${plek}`]=v.crew;}save();},
     async setReserve(wid,rol,crew,on){S.reserve=S.reserve||{};const r=(S.reserve[wid]=S.reserve[wid]||{});r[rol]=(r[rol]||[]).filter(c=>c!==crew);if(on)r[rol].push(crew);save();},
@@ -423,7 +425,7 @@ function SupabaseStore(client){
       return {labels,rollen:rollen.map(r=>r.id),users};
     },
     async load(){
-      const [intake,goedkeuringen,besch,ind,weekends,toewijzingen,medisch,pending,twPending,resRows,status,vkRows]=await Promise.all([
+      const [intake,goedkeuringen,besch,ind,weekends,toewijzingen,medisch,pending,twPending,resRows,status,vkRows,instRows,notities]=await Promise.all([
         alle('intake','crew,label,ervaring,vervuld,voorkeur,toelichting'),
         alle('goedkeuringen','crew,label,rol,status,bron,door,datum,notitie'),
         alle('beschikbaarheid','crew,weekend'),
@@ -436,13 +438,15 @@ function SupabaseStore(client){
         alle('reserve','weekend,rol,crew,volgorde').catch(()=>[]),
         alle('crew_status','crew,label,status,notitie,door,datum').catch(()=>[]),
         alle('indeling_voorkeur','weekend,rol,plek,crew,door,status,notitie,datum').catch(()=>[]),
+        alle('instellingen','sleutel,waarde').catch(()=>[]),
+        alle('crew_notitie','crew,tekst,door,bijgewerkt').catch(()=>[]),
       ]);
       const voorkeur={};vkRows.forEach(v=>(voorkeur[v.weekend]=voorkeur[v.weekend]||{})[`${v.rol}#${v.plek}`]=v);
       const reserve={};resRows.forEach(r=>((reserve[r.weekend]=reserve[r.weekend]||{})[r.rol]=(reserve[r.weekend][r.rol]||[])).push(r.crew));
       const beschikbaar={};besch.forEach(b=>(beschikbaar[b.crew]=beschikbaar[b.crew]||[]).push(b.weekend));
       const indeling={};ind.forEach(i=>(indeling[i.weekend]=indeling[i.weekend]||{})[`${i.rol}#${i.plek}`]=i.crew);
       let verdeling=null;try{const {data}=await client.rpc('verdeling_overzicht');if(Array.isArray(data))verdeling=data;}catch(e){}
-      return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,twPending,reserve,status,voorkeur,verdeling};
+      return {intake,goedkeuringen,beschikbaar,indeling,weekends,toewijzingen,medisch,pending,twPending,reserve,status,voorkeur,verdeling,notities,open:!instRows.some(r=>r.sleutel==='open_registratie'&&r.waarde!=='true')};
     },
     async loadUsers(){try{return await alle('profiles','id,naam,rol,rollen,geslacht,email,telefoon');}catch(e){return null;}},
     async saveIntake(i){await one(client.from('intake').upsert(i,{onConflict:'crew,label'}));await one(client.rpc('stel_voor_uit_intake',{p_crew:i.crew,p_label:i.label}));},
@@ -468,6 +472,8 @@ function SupabaseStore(client){
     async setRollen(id,rollen){await one(client.rpc('zet_rollen',{p_user:id,p_rollen:rollen}));},
     async deleteToewijzing(id){await one(client.from('toewijzingen').delete().eq('id',id));},
     async addToewijzingPending(t){await one(client.from('toewijzingen_pending').insert({...t,email:t.email.toLowerCase()}));try{await client.rpc('verwerk_toewijzingen_pending');}catch(e){}},
+    async setNotitie(crew,tekst){if(tekst)await one(client.from('crew_notitie').upsert({crew,tekst,door:me.id,bijgewerkt:new Date().toISOString()},{onConflict:'crew'}));else await one(client.from('crew_notitie').delete().eq('crew',crew));},
+    async setOpen(open){await one(client.from('instellingen').upsert({sleutel:'open_registratie',waarde:open?'true':'false'},{onConflict:'sleutel'}));},
     async setVoorkeur(wid,rol,plek,crew){if(crew)await one(client.from('indeling_voorkeur').upsert({weekend:wid,rol,plek,crew,door:me.id,status:'voorgesteld',notitie:'',datum:today()},{onConflict:'weekend,rol,plek'}));else await one(client.from('indeling_voorkeur').delete().match({weekend:wid,rol,plek}));},
     async voorkeurBesluit(wid,rol,plek,besluit){await one(client.rpc('voorkeur_besluit',{p_weekend:wid,p_rol:rol,p_plek:plek,p_besluit:besluit,p_notitie:''}));},
     async setReserve(wid,rol,crew,on){if(on)await one(client.from('reserve').upsert({weekend:wid,rol,crew},{onConflict:'weekend,rol,crew'}));else await one(client.from('reserve').delete().match({weekend:wid,rol,crew}));},
@@ -542,13 +548,15 @@ function scopeWeekends(){ // [{weekend, rol|null, functie}]
 /* Wie mag welke plek indelen: kantoor en bewegingsleider alles; PL alles behalve EHBO en Foto/video;
    GL alleen Spreker; FL alleen Facilitair; coördinator van een rol alleen die rol binnen zijn label(s). */
 const PL_NIET=['EHBO','Foto/video'];
+/* Coördinator van een heel label: alles binnen dat label (indelen, aantallen, export). */
+const isLabelCoord=w=>myToew().some(t=>t.soort==='label'&&t.functie==='coordinator'&&t.label===w.label);
 function magIndelen(w,rol){
-  if(isKantoor())return true;
+  if(isKantoor()||isLabelCoord(w))return true;
   if(isLeider()&&myLabels().includes(w.label))return true;
   return myToew().some(t=>(t.soort==='weekend'&&t.weekend===w.id&&((t.functie==='PL'&&!PL_NIET.includes(rol))||(t.functie==='GL'&&rol==='Spreker')||(t.functie==='FL'&&rol==='Facilitair')))
     ||(t.soort==='rol'&&t.rol===rol&&(!t.label||t.label===w.label)));
 }
-const magSlots=w=>isKantoor()||myToew().some(t=>t.soort==='weekend'&&t.weekend===w.id&&t.functie==='PL');
+const magSlots=w=>isKantoor()||isLabelCoord(w)||myToew().some(t=>t.soort==='weekend'&&t.weekend===w.id&&t.functie==='PL');
 const bijeenkomsten=w=>[w.startdag,w.crewmeeting,w.terugkomavond].filter(Boolean);
 /* Doelgroep van een weekend: eigen instelling (voor) of anders die van het label. */
 const wkVoor=w=>(w.voor&&w.voor.length?w.voor:(lbl(w.label)?.voor||['M','V']));
@@ -604,7 +612,7 @@ function viewGoedkeuring(){
     }).join('');
     const opm=D.intake.find(i=>i.crew===c.id&&i.toelichting)?.toelichting;
     const nAv=D.weekends.filter(w=>labels.includes(w.label)&&isAvail(c.id,w.id)).length;
-    return `<tr><td class="name">${esc(c.naam)}<div class="muted" style="font-weight:400;font-size:12px">${c.geslacht||''} · ${nAv?nAv+'× beschikbaar':'nog geen beschikbaarheid'}</div></td><td>${per}${opm?`<div class="muted" style="font-size:12px">„${esc(opm)}”</div>`:''}</td></tr>`;
+    return `<tr><td class="name">${esc(c.naam)}<div class="muted" style="font-weight:400;font-size:12px">${c.geslacht||''} · ${nAv?nAv+'× beschikbaar':'nog geen beschikbaarheid'}</div>${notitieHtml(c.id)}</td><td>${per}${opm?`<div class="muted" style="font-size:12px">„${esc(opm)}”</div>`:''}</td></tr>`;
   }).join('');
   const add=(isKantoor()||isLeider())?`<div class="tools"><span class="muted">Rol toevoegen:</span><select id="nvCrew">${crewUsers().map(c=>`<option value="${c.id}">${esc(c.naam)}</option>`).join('')}</select><select id="nvLabel">${labels.map(l=>`<option value="${l}">${esc(lbl(l).naam)}</option>`).join('')}</select><select id="nvRol">${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select>${isLeider()?`<select id="nvStatus"><option value="goedgekeurd">direct goedgekeurd</option><option value="voorgesteld">eerst beoordelen</option></select>`:''}<button id="nvAdd" class="small">Toevoegen</button><span class="muted" style="font-size:12px">Voor wie zelf geen (passende) rol heeft opgegeven. ${isLeider()?'Goedgekeurd = direct kiesbaar voor de projectleider.':'Komt als voorstel bij de bewegingsleider.'}</span></div>`:'';
   const scope=isLeider()?M.labels.flatMap(l=>[l.leider_m===me.id?l.naam+' (mannen)':null,l.leider_v===me.id?l.naam+' (vrouwen)':null]).filter(Boolean).join(', '):'';
@@ -722,7 +730,12 @@ function viewCrewbeheer(){
   const kandidaten=[...M.users].filter(u=>rollenVan(u).some(r=>r==='leider'||r==='kantoor')).sort(opNaam);
   const leiderSel=(l,veld)=>`<select data-leider="${l.id}" data-veld="${veld}"><option value="">(niemand)</option>${kandidaten.map(u=>`<option value="${u.id}" ${l[veld]===u.id?'selected':''}>${esc(u.naam||u.email||u.id)}</option>`).join('')}</select>`;
   const leiderRows=M.labels.map(l=>`<tr><td class="name">${esc(l.naam)}</td><td>${(l.voor||[]).includes('M')||(l.gast||[]).includes('M')?leiderSel(l,'leider_m'):'<span class="muted">n.v.t.</span>'}</td><td>${(l.voor||[]).includes('V')||(l.gast||[]).includes('V')?leiderSel(l,'leider_v'):'<span class="muted">n.v.t.</span>'}</td></tr>`).join('');
-  return `<div class="band"></div><section class="panel"><h2>Bewegingsleiders</h2><div class="body">
+  const open=!aanmeldingDicht();
+  return `<div class="band"></div><section class="panel"><h2>Aanmelding <span class="tag ${open?'':'lbl'}" style="vertical-align:middle">${open?'open':'gesloten'}</span></h2><div class="body">
+    <p class="muted">${open?'Crew kan zich aanmelden en inzet en beschikbaarheid wijzigen. Onbekende mailadressen krijgen bij inloggen automatisch een crew-profiel.':'Crew kan inzet (stap 3) en beschikbaarheid (stap 4) alleen nog bekijken. Nieuwe mailadressen krijgen geen profiel meer, tenzij je ze hieronder klaarzet.'} De achterkant blijft altijd open: kantoor, bewegingsleiders, projectleiders en coördinatoren kunnen screenen en indelen. Kantoor kan ook na sluiting beschikbaarheid aanpassen (Indeling) en rollen toevoegen (Screening).</p>
+    <div class="tools"><button class="${open?'':'primary'} small" data-setopen="${open?'0':'1'}">${open?'Aanmelding sluiten':'Aanmelding weer openen'}</button></div>
+  </div></section>
+  <div class="band"></div><section class="panel"><h2>Bewegingsleiders</h2><div class="body">
     <p class="muted">Wie screent de rollen per label, apart voor mannen en vrouwen. Alleen accounts met rol leider of kantoor zijn te kiezen. Zonder koppeling kan niemand goedkeuren voor dat label.</p>
     <div class="tw"><table><thead><tr><th>Label</th><th>Screent mannen</th><th>Screent vrouwen</th></tr></thead><tbody>${leiderRows}</tbody></table></div>
   </div></section>
@@ -801,7 +814,7 @@ function exportKnop(w){
 function beschikbaarLijst(w){
   const av=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)).sort(opNaam);
   const rows=av.map(c=>{const i=intakeOf(c.id,w.label);const andere=M.labels.filter(l=>l.id!==w.label&&intakeOf(c.id,l.id)).map(l=>l.naam);
-    return `<tr><td class="name">${esc(c.naam)}</td><td>${c.geslacht||''}</td><td>${esc(fmtErv(i?.ervaring))}</td><td>${esc(andere.join(', '))}</td><td>${esc(i?.toelichting||'')}</td></tr>`;}).join('');
+    return `<tr><td class="name">${esc(c.naam)}</td><td>${c.geslacht||''}</td><td>${esc(fmtErv(i?.ervaring))}</td><td>${esc(andere.join(', '))}</td><td>${esc(i?.toelichting||'')}${notitieHtml(c.id)}</td></tr>`;}).join('');
   return `<p class="muted">${esc(lbl(w.label).naam)} werkt zonder rollen: dit is de volledige lijst van wie beschikbaar is (${av.length}).</p>
     <div class="tw"><table><thead><tr><th>Naam</th><th>M/V</th><th>Ervaring</th><th>Ook crew bij</th><th>Opmerkingen</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="muted">Nog niemand beschikbaar.</td></tr>'}</tbody></table></div>`;
 }
@@ -866,15 +879,15 @@ function viewAanmeldingen(){
   const kies=items.length>1?`<div class="tools" style="margin-top:16px"><label for="amSel" class="muted">Jouw weekend:</label><select id="amSel">${items.map(x=>`<option value="${x.w.id}" ${x.w.id===cur.w.id?'selected':''}>${esc(lbl(x.w.label).naam)} · ${esc(x.w.naam)} (${esc(x.w.datum)}) · ${esc(fmtRollen([...x.functies]))}</option>`).join('')}</select></div>`:'';
   return kies+[cur].map(({w,rollen,alles,functies})=>{
     const rolFilter=alles?null:[...rollen];
-    const canEdit=M.rollen.some(r=>magIndelen(w,r));const isPL=functies.has('PL');const mijnRollen=M.rollen.filter(r=>magIndelen(w,r));
+    const canEdit=M.rollen.some(r=>magIndelen(w,r));const isPL=magSlots(w);const mijnRollen=M.rollen.filter(r=>magIndelen(w,r));
     const av=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&(!rolFilter||approvedRoles(c.id,w.label).some(r=>rolFilter.includes(r))||wil(c.id,w.label).some(r=>rolFilter.includes(r))));
     const list=av.map(c=>{const i=intakeOf(c.id,w.label);const roles=approvedRoles(c.id,w.label).filter(r=>!rolFilter||rolFilter.includes(r));
-      const cst=crewStatus(c.id,w.label);return `<tr><td class="name ${timesChosen(c.id)>MAX_OK?'over':''}" title="${esc(overTxt(c.id))}">${esc(c.naam)}${timesChosen(c.id)?` <span class="muted" style="font-weight:400">${timesChosen(c.id)}x</span>`:''}${cst?` <span class="tag" style="font-weight:400">${esc(STATUS_TXT[cst])}</span>`:''}</td><td>${rollenTekst(c.id,w.label,rolFilter)}</td><td>${esc(fmtErv(i?.ervaring))}</td><td>${esc(i?.toelichting||'')}</td></tr>`;}).join('');
+      const cst=crewStatus(c.id,w.label);return `<tr><td class="name ${timesChosen(c.id)>MAX_OK?'over':''}" title="${esc(overTxt(c.id))}">${esc(c.naam)}${timesChosen(c.id)?` <span class="muted" style="font-weight:400">${timesChosen(c.id)}x</span>`:''}${cst?` <span class="tag" style="font-weight:400">${esc(STATUS_TXT[cst])}</span>`:''}</td><td>${rollenTekst(c.id,w.label,rolFilter)}</td><td>${esc(fmtErv(i?.ervaring))}</td><td>${esc(i?.toelichting||'')}${notitieHtml(c.id)}</td></tr>`;}).join('');
     return `<div class="band"></div><section class="panel"><h2>${esc(w.naam)} <span class="muted" style="font-size:14px;text-transform:none;letter-spacing:0">${esc(w.datum)} · jij: ${esc(fmtRollen([...functies]))}${rolFilter?' · alleen '+esc(fmtRollen(rolFilter)):''}</span></h2><div class="body">
       ${letOp(w)?`<p class="muted">${letOp(w)}</p>`:''}
       ${zonderRollen(w.label)?beschikbaarLijst(w):`<h3 style="margin-top:8px">Beschikbaar</h3>
       <div class="tw"><table><thead><tr><th>Naam</th><th>Gescreende rollen</th><th>Ervaring</th><th>Opmerkingen</th></tr></thead><tbody>${list||'<tr><td colspan="4" class="muted">Nog niemand beschikbaar.</td></tr>'}</tbody></table></div>`}
-      ${zonderRollen(w.label)?'':`<h3 style="margin-top:16px">${isPL?'Indeling (jij bent PL): kies per rol hoeveel je nodig hebt en wie':canEdit?`Indeling: jij deelt ${esc(fmtRollen(mijnRollen))} in`:'Indeling'}</h3><div>${slotsHtml(w,canEdit,rolFilter&&rolFilter.length===1?rolFilter[0]:null,magSlots(w))}</div>${isPL?exportKnop(w):''}`}
+      ${zonderRollen(w.label)?'':`<h3 style="margin-top:16px">${isPL?`Indeling (${isLabelCoord(w)?'jij bent coördinator van '+esc(lbl(w.label)?.naam):'jij bent PL'}): kies per rol hoeveel je nodig hebt en wie`:canEdit?`Indeling: jij deelt ${esc(fmtRollen(mijnRollen))} in`:'Indeling'}</h3><div>${slotsHtml(w,canEdit,rolFilter&&rolFilter.length===1?rolFilter[0]:null,magSlots(w))}</div>${isPL?exportKnop(w):''}`}
     </div></section>`;
   }).join('');
 }
@@ -947,7 +960,7 @@ function viewToewijzingen(){
     ${twp.length?`<div class="tw" style="margin-top:12px"><table><thead><tr><th>Persoon</th><th>Functie</th><th>Ziet (na eerste login)</th><th></th></tr></thead><tbody>${twp.map((t,i)=>`<tr><td class="name">${esc(pendNaam(t.email))}${pendProfiles.some(p=>p.email===t.email)?'':' <span class="muted">(geen klaargezet profiel)</span>'}</td><td>${esc(fmtRol(t.functie))}</td><td>${soortTxt(t)}</td><td><button class="small" data-deltwp="${i}">Verwijder</button></td></tr>`).join('')}</tbody></table></div>`:''}
   </details>`;
   return `<div class="band"></div><section class="panel"><h2>Toewijzingen</h2><div class="body">
-    <p class="muted">Wie mag welke aanmeldingen zien? Een PL van een weekend ziet de beschikbare crew van dat weekend en deelt in. Een coördinator van een rol (bv. EHBO bij 4M en LIFE, Foto/video bij alle labels) ziet alle aanmeldingen voor die rol binnen die labels. Bewegingsleiders staan niet hier maar bij de labels.</p>
+    <p class="muted">Wie mag welke aanmeldingen zien? Een PL van een weekend ziet de beschikbare crew van dat weekend en deelt in. Een coördinator van een heel label (functie Coördinator, geldt voor heel label) mag binnen dat label alles aan de indeling aanpassen: alle rollen, reserves, het aantal plekken per rol en de export. Een coördinator van een rol (bv. EHBO bij 4M en LIFE, Foto/video bij alle labels) ziet alle aanmeldingen voor die rol binnen die labels. Bewegingsleiders staan niet hier maar bij de labels.</p>
     <form id="twForm" class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end">
       <label class="field"><span>Persoon</span><select name="user">${[...crewUsers()].sort(opNaam).map(u=>`<option value="${u.id}">${esc(u.naam||u.email||u.id)}${rollenVan(u).some(r=>r!=='crew')?' ('+rollenVan(u).filter(r=>r!=='crew').join('/')+')':''}</option>`).join('')}</select></label>
       <label class="field"><span>Functie</span><select name="functie">${FUNCTIES.map(f=>`<option value="${f}">${fmtRol(f)}</option>`).join('')}</select></label>
@@ -1004,8 +1017,8 @@ function viewKlaar(){
     <p>Je beschikbaarheid voor 2027 is binnen. ${wks.length?`Je staat beschikbaar voor <b>${wks.length}</b> ${wks.length===1?'weekend':'weekenden'}${labels.length?' bij '+esc(labels.join(', ')):''}.`:'Je hebt nog geen weekend aangezet.'}</p>
     ${wks.length?`<ul style="margin:10px 0 0 18px;line-height:1.7">${wks.map(w=>`<li>${esc(w.naam)} <span class="muted">· ${esc(w.datum||'')}</span></li>`).join('')}</ul>`:''}
     <h3 style="margin-top:18px">Hoe nu verder</h3>
-    <p class="muted">De bewegingsleiders screenen de aanmeldingen; daarna maken de projectleiders de indeling per weekend. Je hoort van ons zodra je ergens bent ingedeeld. Aanpassen kan tot <b>${DEADLINE}</b>: log opnieuw in en pas je gegevens aan.</p>
-    <div class="tools" style="margin-top:16px"><button class="primary" data-step="uitvraag">Iets aanpassen</button></div>
+    <p class="muted">De bewegingsleiders screenen de aanmeldingen; daarna maken de projectleiders de indeling per weekend. Je hoort van ons zodra je ergens bent ingedeeld. ${dichtVoorMij()?'De aanmelding is gesloten; wijzigen kan alleen nog via contact@4m.nl.':'Aanpassen kan tot <b>'+DEADLINE+'</b>: log opnieuw in en pas je gegevens aan.'}</p>
+    <div class="tools" style="margin-top:16px"><button class="primary" data-step="uitvraag">${dichtVoorMij()?'Mijn opgave bekijken':'Iets aanpassen'}</button></div>
   </div></section>`;
 }
 function viewVerdeling(){
@@ -1077,6 +1090,16 @@ function applyBrand(){const b=brandFor(me)||'4M';const r=document.documentElemen
   setLogo(isKantoor()?'C58':b);
   document.getElementById('heroTitle').textContent=(['account','medisch','profiel','uitvraag','klaar'].includes(UI.step))?'Jouw inzet 2027':isKantoor()?'Crewplanning 2027':isLeider()?'Screening 2027':'Jouw inzet 2027';}
 /* Banner voor crew met een toewijzing (PL/GL/FL/coördinator): direct zichtbaar wat je bent en waar je moet zijn. */
+/* Aanmelding gesloten: crew (iedereen behalve kantoor) kan inzet en beschikbaarheid alleen nog bekijken. */
+const aanmeldingDicht=()=>D&&D.open===false;
+const dichtVoorMij=()=>aanmeldingDicht()&&!isKantoor();
+function dichtBanner(){
+  if(!dichtVoorMij()||!isCrew()||!['account','medisch','profiel','uitvraag','klaar'].includes(UI.step))return '';
+  return `<section class="panel" style="margin-bottom:14px"><div class="body"><b>De aanmelding voor 2027 is gesloten.</b> Je kunt je inzet en beschikbaarheid nog bekijken, maar niet meer wijzigen. Klopt er iets niet of wil je alsnog iets doorgeven? Mail naar contact@4m.nl. Je contact- en medische gegevens kun je wel blijven bijwerken.</div></section>`;
+}
+/* Interne opmerking van kantoor per crewlid; kantoor bewerkt, leiders/PL/coördinatoren lezen. */
+const notitieVan=c=>(D.notities||[]).find(n=>n.crew===c)?.tekst||'';
+const notitieHtml=c=>{const t=notitieVan(c);return (t?`<div class="kn" style="font-size:12px;margin-top:4px"><b>Kantoor:</b> ${esc(t)}</div>`:'')+(isKantoor()?`<div style="margin-top:4px"><button type="button" class="small" data-notitie="${c}">${t?'Opmerking wijzigen':'+ opmerking kantoor'}</button></div>`:'');};
 function toewBanner(){
   if(!isCrew()||isKantoor()||!myToew().length||UI.step==='aanmeldingen')return '';
   const items=myToew().map(t=>t.soort==='weekend'?`<b>${esc(fmtRol(t.functie))}</b> van ${esc(wk(t.weekend)?.naam||t.weekend)}`:t.soort==='label'?`<b>${esc(fmtRol(t.functie))}</b> voor heel ${esc(lbl(t.label)?.naam||t.label)}`:`<b>${esc(fmtRol(t.functie))}</b> ${esc(fmtRol(t.rol))}${t.label?' bij '+esc(lbl(t.label)?.naam):''}`);
@@ -1091,8 +1114,11 @@ function renderPager(){const st=stepsFor();const i=st.findIndex(([k])=>k===UI.st
 async function render(){
   renderSteps();applyBrand();renderWho();renderUserbox();
   const v={account:viewAccount,medisch:viewMedisch,voortgang:viewVoortgang,verdeling:viewVerdeling,crewbeheer:viewCrewbeheer,goedkeuring:viewGoedkeuring,potentieel:viewPotentieel,profiel:viewProfiel,uitvraag:viewUitvraag,klaar:viewKlaar,aanmeldingen:viewAanmeldingen,indeling:viewIndeling,export:viewExport,weekenden:viewWeekenden,toewijzingen:viewToewijzingen,model:viewModel}[UI.step];
-  document.getElementById('main').innerHTML=toewBanner()+v();
+  document.getElementById('main').innerHTML=dichtBanner()+toewBanner()+v();
   renderPager();
+  if(dichtVoorMij()&&(UI.step==='profiel'||(UI.step==='uitvraag'&&!UI.crewView))){
+    document.querySelectorAll('#main input,#main select,#main textarea').forEach(el=>{el.disabled=true;});
+    document.querySelectorAll('#saveAll,#submitAll').forEach(el=>el.remove());}
   if(UI.lastStep!==UI.step){UI.lastStep=UI.step;window.scrollTo({top:0,left:0,behavior:'auto'});}
   try{localStorage.setItem('crewpoort-ui',JSON.stringify({step:UI.step,who:me.id}));}catch(e){}
 }
@@ -1151,6 +1177,10 @@ document.addEventListener('click',async e=>{
   if(b.dataset.bbadd||b.dataset.bbdel){const add=!!b.dataset.bbadd;const wid=b.dataset.bbadd||b.dataset.bbdel;const c=document.getElementById(add?'bbAdd':'bbDel').value;if(!c){toast('Kies eerst een crewlid');return;}
     if(!add&&!confirm(`Beschikbaarheid van ${user(c)?.naam} voor ${wk(wid)?.naam} intrekken?`))return;
     UI.bbOpen=true;try{await db.setAvail(c,wid,add);}catch(e){return;}await refresh();toast(add?`${user(c)?.naam} is beschikbaar voor ${wk(wid)?.naam}`:'Beschikbaarheid ingetrokken');return;}
+  if(b.dataset.notitie){const c=b.dataset.notitie;const t=prompt(`Interne opmerking van kantoor bij ${user(c)?.naam||''}.\nZichtbaar voor kantoor, bewegingsleiders, projectleiders en coördinatoren; niet voor het crewlid zelf. Geen medische gegevens. Leeg laten = opmerking verwijderen.`,notitieVan(c));
+    if(t===null)return;try{await db.setNotitie(c,t.trim());}catch(e){return;}await refresh();toast(t.trim()?'Opmerking opgeslagen':'Opmerking verwijderd');return;}
+  if(b.dataset.setopen){const open=b.dataset.setopen==='1';if(!confirm(open?'Aanmelding weer openen? Crew kan dan opnieuw inzet en beschikbaarheid wijzigen en nieuwe mensen kunnen zich registreren.':'Aanmelding sluiten? Crew kan daarna niets meer wijzigen aan inzet en beschikbaarheid. De achterkant blijft open voor kantoor, bewegingsleiders, projectleiders en coördinatoren.'))return;
+    try{await db.setOpen(open);}catch(e){return;}await refresh();toast(open?'Aanmelding is weer open':'Aanmelding is gesloten');return;}
   if(b.dataset.scrreset){UI.scr={g:'',l:'',r:'',s:''};await render();return;}
   if(b.dataset.aflijst){const n=afContactRijen().length;if(!n){toast('Geen personen in de lijst');return;}
     if(b.dataset.aflijst==='csv'){const blob=new Blob(['\ufeff'+afContactTekst(',')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`afgewezen-contact-${today()}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);toast(`CSV met ${n} personen`);}
@@ -1237,7 +1267,8 @@ async function boot(){
   sb=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey);
   const {data:{session}}=await sb.auth.getSession();
   document.documentElement.setAttribute('data-brand','4M');setLogo('C58');document.getElementById('heroTitle').textContent='Inloggen';
-  if(!session){document.getElementById('userbox').hidden=true;document.getElementById('heroTitle').textContent='Beschikbaarheid CREW 2027';document.getElementById('main').innerHTML=`<div class="intro">Welkom bij de crewplanning 2027 van <b>4M, 4Family, Arise, LIFE en Promo (Events)</b>. Hier geef je in vier stappen je gegevens, je inzet en je beschikbaarheid per weekend door. Daarna gaan de bewegingsleiders en projectleiders aan de slag met de planning. Invullen kan tot <b>${DEADLINE}</b>; aanpassen kan daarna nog steeds door opnieuw in te loggen.</div><div class="band"></div><section class="panel login"><h2>Inloggen</h2><div class="body">
+  if(!session){let loginDicht=false;try{const {data}=await sb.from('instellingen').select('waarde').eq('sleutel','open_registratie').maybeSingle();loginDicht=!!data&&data.waarde!=='true';}catch(e){}
+    document.getElementById('userbox').hidden=true;document.getElementById('heroTitle').textContent='Beschikbaarheid CREW 2027';document.getElementById('main').innerHTML=`<div class="intro">Welkom bij de crewplanning 2027 van <b>4M, 4Family, Arise, LIFE en Promo (Events)</b>. Hier geef je in vier stappen je gegevens, je inzet en je beschikbaarheid per weekend door. Daarna gaan de bewegingsleiders en projectleiders aan de slag met de planning. ${loginDicht?'<b>De aanmelding voor 2027 is gesloten.</b> Heb je je al aangemeld, dan kun je inloggen om je opgave te bekijken. Projectleiders, bewegingsleiders en coördinatoren loggen hier in om de planning te maken. Alsnog aanmelden of iets wijzigen: mail naar contact@4m.nl.':'Invullen kan tot <b>'+DEADLINE+'</b>; aanpassen kan daarna nog steeds door opnieuw in te loggen.'}</div><div class="band"></div><section class="panel login"><h2>Inloggen</h2><div class="body">
       <p class="muted">Je krijgt een inloglink via de mail, een wachtwoord is er niet. Nieuw? Vul gewoon je mailadres in, daarmee maak je direct je account aan.</p>
       <div class="row"><label class="lab" for="email">E-mailadres</label><div class="ctl"><input type="email" id="email" placeholder="je@mail.nl" autocomplete="email"></div></div>
       <div class="tools"><button class="primary" id="sendLink">Stuur inloglink</button><span class="muted" id="loginMsg"></span></div></div></section>`;
