@@ -527,7 +527,7 @@ const crewStatus=(c,l)=>(D.status||[]).find(x=>x.crew===c&&x.label===l)?.status|
 const reserveVan=(wid,rol)=>((D.reserve||{})[wid]||{})[rol]||[];
 const timesReserve=c=>Object.values(D.reserve||{}).reduce((n,r)=>n+Object.values(r).filter(a=>a.includes(c)).length,0);
 /* Labels waarvan je de verdeling mag zien: kantoor alles, bewegingsleider zijn labels, PL de labels van zijn weekenden. */
-const verdLabels=()=>isKantoor()?M.labels.map(l=>l.id):[...new Set([...myLabels(),...myToew().filter(t=>t.soort==='weekend'&&t.functie==='PL').map(t=>wk(t.weekend)?.label).filter(Boolean)])];
+const verdLabels=()=>isKantoor()?M.labels.map(l=>l.id):[...new Set([...myLabels(),...coordLabels(),...myToew().filter(t=>t.soort==='weekend'&&t.functie==='PL').map(t=>wk(t.weekend)?.label).filter(Boolean)])];
 const LABEL_SUB={'4F':'Couples en ouder-kind'};
 const labelNaam=l=>{const o=typeof l==='string'?lbl(l):l;if(!o)return '';return o.naam+(LABEL_SUB[o.id]?' · '+LABEL_SUB[o.id]:'');};
 const timesChosen=c=>Object.values(D.indeling).reduce((n,s)=>n+Object.values(s).filter(v=>v===c).length,0);
@@ -549,7 +549,9 @@ function scopeWeekends(){ // [{weekend, rol|null, functie}]
    GL alleen Spreker; FL alleen Facilitair; coördinator van een rol alleen die rol binnen zijn label(s). */
 const PL_NIET=['EHBO','Foto/video'];
 /* Coördinator van een heel label: alles binnen dat label (indelen, aantallen, export). */
-const isLabelCoord=w=>myToew().some(t=>t.soort==='label'&&t.functie==='coordinator'&&t.label===w.label);
+const isCoordF=t=>/^co[o\u00f6]rdinator$/i.test(t.functie||'');
+const coordLabels=()=>[...new Set(myToew().filter(t=>t.soort==='label'&&isCoordF(t)&&t.label).map(t=>t.label))];
+const isLabelCoord=w=>coordLabels().includes(w.label);
 function magIndelen(w,rol){
   if(isKantoor()||isLabelCoord(w))return true;
   if(isLeider()&&myLabels().includes(w.label))return true;
@@ -570,7 +572,7 @@ function stepsFor(){
   const s=[];
   if(isCrew()){s.push(['account','1 · Gegevens'],['medisch','2 · Medisch'],['profiel','3 · Inzet'],['uitvraag','4 · Beschikbaarheid'],['klaar','5 · Klaar']);if(myToew().length){const ws=[...new Set(myToew().filter(t=>t.soort==='weekend').map(t=>t.weekend))];s.push(['aanmeldingen',ws.length===1&&wk(ws[0])?'★ '+wk(ws[0]).naam:ws.length>1?'★ Mijn weekenden':'★ Mijn crew']);}}
   if(isKantoor()||isLeider())s.push(['voortgang','Voortgang'],['goedkeuring','Screening'],['potentieel','Potentieel'],['indeling','Indeling'],['export','Exportsheet']);
-  if(isKantoor()||isLeider()||myToew().some(t=>t.functie==='PL'))s.push(['verdeling','Verdeling']);
+  if(isKantoor()||isLeider()||coordLabels().length||myToew().some(t=>t.functie==='PL'))s.push(['verdeling','Verdeling']);
   if(isKantoor())s.push(['weekenden','Weekenden'],['toewijzingen','Toewijzingen'],['crewbeheer','Crew'],['model','Model']);
   return s;
 }
