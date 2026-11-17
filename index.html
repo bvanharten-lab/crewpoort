@@ -535,7 +535,8 @@ const timesReserve=c=>Object.values(D.reserve||{}).reduce((n,r)=>n+Object.values
 const verdLabels=()=>isKantoor()?M.labels.map(l=>l.id):[...new Set([...myLabels(),...coordLabels(),...myToew().filter(t=>t.soort==='weekend'&&t.functie==='PL').map(t=>wk(t.weekend)?.label).filter(Boolean)])];
 const LABEL_SUB={'4F':'Couples en ouder-kind'};
 const labelNaam=l=>{const o=typeof l==='string'?lbl(l):l;if(!o)return '';return o.naam+(LABEL_SUB[o.id]?' · '+LABEL_SUB[o.id]:'');};
-const timesChosen=c=>Object.values(D.indeling).reduce((n,s)=>n+Object.values(s).filter(v=>v===c).length,0);
+/* Aantal weekenden waarop iemand is ingedeeld; een dubbelrol op één weekend telt als één keer. */
+const timesChosen=c=>Object.values(D.indeling).filter(s=>Object.values(s).includes(c)).length;
 const isPotential=g=>g.bron==='voorkeur'&&g.status!=='afgewezen';
 const chosenDetail=c=>Object.entries(D.indeling).flatMap(([wid,slots])=>Object.entries(slots).filter(([k,v])=>v===c).map(([k])=>{const w=wk(wid);return w?`${w.naam} (${fmtRol(k.split('#')[0])})`:null;})).filter(Boolean);
 const overTxt=c=>{const n=timesChosen(c);return n>MAX_OK?`Al ${n}x gekozen: ${chosenDetail(c).join(', ')}`:'';};
@@ -835,7 +836,7 @@ function slotsBlok(w,editable,onlyRol,canEditSlots){
   const cr=wkCrews(w);if(!cr)return slotsHtml(w,editable,onlyRol,canEditSlots,1);
   return cr.map((naam,i)=>{const sl=slotsVan(w,i+1);const n=Object.values(sl).reduce((a,b)=>a+ +b,0);const ind=D.indeling[w.id]||{};const gevuld=Object.entries(ind).filter(([k,v])=>v&&(+k.split('#')[1]>100)===(i===1)).length;
     return `<div class="crewblok" style="margin-top:${i?22:6}px"><h3 style="margin:0 0 6px;padding-bottom:6px;border-bottom:2px solid var(--logo)">${esc(naam)} <span class="muted" style="font-size:13px;font-weight:400;text-transform:none;letter-spacing:0">· ${gevuld}/${n} gevuld</span></h3>${slotsHtml(w,editable,onlyRol,canEditSlots,i+1)||'<p class="muted">Nog geen plekken voor deze crew. '+(canEditSlots?'':'De projectleider of kantoor stelt het aantal per rol in.')+'</p>'}</div>`;}).join('')
-    +`<p class="muted" style="font-size:12px;margin-top:10px">Iemand kan maar in één van de twee crews staan. De beschikbaarheid geldt voor het hele weekend.</p>`;
+    +`<p class="muted" style="font-size:12px;margin-top:10px">De beschikbaarheid geldt voor het hele weekend. Wie al is ingedeeld, staat onderaan elke keuzelijst onder Dubbelrol en kan zo een tweede rol krijgen, ook in de andere crew.</p>`;
 }
 function slotsHtml(w,editable,onlyRol,canEditSlots,crewNr=1){
   const sl=slotsVan(w,crewNr);const off=crewNr===2?100:0;
@@ -844,16 +845,22 @@ function slotsHtml(w,editable,onlyRol,canEditSlots,crewNr=1){
   const rollen=M.rollen.filter(r=>!onlyRol||r===onlyRol).filter(r=>canEditSlots||(sl[r]||0)>0);
   return rollen.map(rol=>{const n=+sl[rol]||0;
     const sel=(i)=>{const key=`${rol}#${off+i}`;const cur=ind[key]||'';
+      // Andere rollen van dezelfde persoon op dit weekend (dubbelrol), buiten deze plek
+      const andere=c=>Object.entries(ind).filter(([k,v])=>v===c&&k!==key).map(([k])=>k.split('#')[0]);
+      const dubbel=[];
       const opts=crewUsers().filter(c=>wkPastBij(w,c)||cur===c.id).map(c=>{const ok=isApproved(c.id,w.label,rol),av=isAvail(c.id,w.id),busy=used.has(c.id)&&cur!==c.id;
         if(ok&&av&&!busy)return `<option value="${c.id}" ${cur===c.id?'selected':''}>${timesChosen(c.id)>MAX_OK?'⚠ ':''}${esc(c.naam)} · ${timesChosen(c.id)}x gekozen</option>`;
-        if(cur===c.id)return `<option value="${c.id}" selected>${esc(c.naam)}</option>`;return null;}).filter(Boolean).join('');
+        if(cur===c.id)return `<option value="${c.id}" selected>${esc(c.naam)}</option>`;
+        if(ok&&av&&busy&&!andere(c.id).includes(rol))dubbel.push(`<option value="${c.id}">${esc(c.naam)} · ook ${esc(fmtRollen([...new Set(andere(c.id))]))}</option>`);
+        return null;}).filter(Boolean).join('')+(dubbel.length?`<optgroup label="Dubbelrol: al ingedeeld op dit weekend">${dubbel.join('')}</optgroup>`:'');
+      const dub=cur?[...new Set(andere(cur))]:[];const dubTag=dub.length?`<div class="muted" style="font-size:11px">Dubbelrol: ook ${esc(fmtRollen(dub))}</div>`:'';
       const vk=((D.voorkeur||{})[w.id]||{})[key];const vkNaam=vk?esc(user(vk.crew)?.naam||'?'):'';
       const vkTag=vk?`<div class="muted" style="font-size:11px">Voorkeur PL: ${vkNaam} · ${vk.status==='voorgesteld'?'wacht op coördinator':vk.status}</div>`:'';
-      if(mag(rol))return `<span class="pick"><select data-slot="${key}" data-wk="${w.id}" class="${cur&&timesChosen(cur)>MAX_OK?'over':''}"><option value="">niet ingedeeld</option>${opts}</select>${cur&&overTxt(cur)?`<div class="overnote">${esc(overTxt(cur))}</div>`:''}${vk&&vk.status==='voorgesteld'?`<div class="muted" style="font-size:12px">Voorkeur van de PL: <b>${vkNaam}</b> <button type="button" class="small" data-vkbesluit="${w.id}|${rol}|${off+i}|goedgekeurd">Overnemen</button> <button type="button" class="small" data-vkbesluit="${w.id}|${rol}|${off+i}|afgewezen">Afwijzen</button></div>`:vkTag}</span>`;
+      if(mag(rol))return `<span class="pick"><select data-slot="${key}" data-wk="${w.id}" class="${cur&&timesChosen(cur)>MAX_OK?'over':''}"><option value="">niet ingedeeld</option>${opts}</select>${cur&&overTxt(cur)?`<div class="overnote">${esc(overTxt(cur))}</div>`:''}${dubTag}${vk&&vk.status==='voorgesteld'?`<div class="muted" style="font-size:12px">Voorkeur van de PL: <b>${vkNaam}</b> <button type="button" class="small" data-vkbesluit="${w.id}|${rol}|${off+i}|goedgekeurd">Overnemen</button> <button type="button" class="small" data-vkbesluit="${w.id}|${rol}|${off+i}|afgewezen">Afwijzen</button></div>`:vkTag}</span>`;
       // PL (of GL/FL) zonder indeelrecht voor deze rol: voorkeur opgeven voor de coördinator
       if(editable&&magSlots(w)&&!cur){const vopts=crewUsers().filter(c=>wkPastBij(w,c)&&isApproved(c.id,w.label,rol)&&isAvail(c.id,w.id)&&(!used.has(c.id)||vk?.crew===c.id)).map(c=>`<option value="${c.id}" ${vk?.crew===c.id?'selected':''}>${esc(c.naam)} · ${timesChosen(c.id)}x gekozen</option>`).join('');
         return `<span class="pick"><select data-voorkeur="${key}" data-wk="${w.id}" title="Jouw voorkeur; de coördinator ${esc(fmtRol(rol))} beslist"><option value="">voorkeur opgeven…</option>${vopts}</select>${vk?`<div class="muted" style="font-size:11px">${vk.status==='voorgesteld'?'Wacht op de coördinator '+esc(fmtRol(rol)):vk.status==='afgewezen'?'Afgewezen door de coördinator'+(vk.notitie?': '+esc(vk.notitie):''):''}</div>`:''}</span>`;}
-      return `<span class="pick"><b class="${cur&&timesChosen(cur)>MAX_OK?'over':''}">${cur?esc(user(cur).naam):'nog open'}</b>${vkTag}</span>`;};
+      return `<span class="pick"><b class="${cur&&timesChosen(cur)>MAX_OK?'over':''}">${cur?esc(user(cur).naam):'nog open'}</b>${dubTag}${vkTag}</span>`;};
     const blocked=n?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!isApproved(c.id,w.label,rol)&&wil(c.id,w.label).includes(rol)).map(c=>c.naam):[];
     const cnt=canEditSlots?`<select data-slotcount="${rol}" data-crewnr="${crewNr}" data-wk="${w.id}" title="Aantal nodig">${Array.from({length:Math.max(31,n+1)},(_,k)=>`<option value="${k}" ${k===n?'selected':''}>${k}</option>`).join('')}</select>`:`<span class="muted">${n}</span>`;
     const wie=editable&&!mag(rol)?`<div class="muted" style="font-size:11px">${PL_NIET.includes(rol)?'coördinator '+esc(fmtRol(rol))+' deelt in; jij kunt een voorkeur opgeven':'via PL'}</div>`:'';
@@ -1058,8 +1065,8 @@ function viewVerdeling(){
   // Beperk tot de labels die jij mag zien
   const V=raw.map(v=>{const waar=(v.waar||[]).filter(x=>scope.includes(x.label));const res=(v.reserve||[]).filter(x=>scope.includes(x.label));const b=(v.beschikbaar||[]).filter(x=>scope.includes(x.label));
     if(R){const bR=b.filter(x=>isApproved(v.id,x.label,R));const wR=waar.filter(x=>x.rol===R);
-      return {...v,waar:wR,reserve:res.filter(x=>x.rol===R),beschikbaar:bR,n:wR.length,totaal:waar.length,status:v.status||{}};}
-    return {...v,waar,reserve:res,beschikbaar:b,n:waar.length,totaal:waar.length,status:v.status||{}};}).filter(v=>v.beschikbaar.length||(R&&v.n));
+      return {...v,waar:wR,reserve:res.filter(x=>x.rol===R),beschikbaar:bR,n:new Set(wR.map(x=>x.weekend)).size,totaal:new Set(waar.map(x=>x.weekend)).size,status:v.status||{}};}
+    return {...v,waar,reserve:res,beschikbaar:b,n:new Set(waar.map(x=>x.weekend)).size,totaal:new Set(waar.map(x=>x.weekend)).size,status:v.status||{}};}).filter(v=>v.beschikbaar.length||(R&&v.n));
   const gekozen=V.filter(v=>v.n>0).sort(opNaam);
   const over=gekozen.filter(v=>v.n>MAX_OK);
   const nul=V.filter(v=>v.n===0).sort(opNaam);
