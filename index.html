@@ -1025,11 +1025,12 @@ function viewToewijzingen(){
 function voortgangData(){
   const labels=myLabels();
   return D.weekends.filter(w=>labels.includes(w.label)).sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||'')).map(w=>{
-    const crew=crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id));
+    const gOk=c=>!UI.voortG||user(c)?.geslacht===UI.voortG;
+    const crew=crewUsers().filter(c=>gOk(c.id)&&wkPastBij(w,c)&&isAvail(c.id,w.id));
     const kies=zonderRollen(w.label)?crew:crew.filter(c=>approvedRoles(c.id,w.label).length);
     const open=zonderRollen(w.label)?0:new Set(crew.filter(c=>G(c.id,w.label).some(g=>g.status==='voorgesteld')).map(c=>c.id)).size;
     const plekken=zonderRollen(w.label)?0:totaalPlekken(w);
-    const ingedeeld=Object.values(D.indeling[w.id]||{}).filter(Boolean).length;
+    const ingedeeld=Object.values(D.indeling[w.id]||{}).filter(Boolean).filter(gOk).length;
     const pl=D.toewijzingen.filter(t=>t.soort==='weekend'&&t.weekend===w.id&&t.functie==='PL').map(t=>user(t.user)?.naam).filter(Boolean);
     return {w,beschikbaar:crew.length,kiesbaar:kies.length,open,plekken,ingedeeld,pl};
   });
@@ -1038,11 +1039,12 @@ function viewVoortgang(){
   const rows=voortgangData();
   const bar=(n,t)=>{const p=t?Math.min(100,Math.round(n/t*100)):0;return `<div class="bar"><i style="width:${p}%;background:${p>=100?'var(--ok)':p>=50?'var(--warn)':'var(--accent)'}"></i></div><span class="muted" style="font-size:12px">${n}/${t}</span>`;};
   const tot={besch:0,open:0,ingedeeld:0,plekken:0};rows.forEach(r=>{tot.open+=r.open;tot.ingedeeld+=r.ingedeeld;tot.plekken+=r.plekken;});
-  const crewMet=new Set(rows.flatMap(r=>crewUsers().filter(c=>wkPastBij(r.w,c)&&isAvail(c.id,r.w.id)).map(c=>c.id))).size;
-  const klaar=rows.filter(r=>r.plekken&&r.ingedeeld>=r.plekken).length;
+  const crewMet=new Set(rows.flatMap(r=>crewUsers().filter(c=>(!UI.voortG||c.geslacht===UI.voortG)&&wkPastBij(r.w,c)&&isAvail(c.id,r.w.id)).map(c=>c.id))).size;
+  const klaar=rows.filter(r=>r.plekken&&Object.values(D.indeling[r.w.id]||{}).filter(Boolean).length>=r.plekken).length;
   const scope=isLeider()?M.labels.flatMap(l=>[l.leider_m===me.id?l.naam+' (mannen)':null,l.leider_v===me.id?l.naam+' (vrouwen)':null]).filter(Boolean).join(', '):'alle labels';
   return `<div class="band"></div><section class="panel"><h2>Voortgang</h2><div class="body">
     <p class="muted">Per weekend binnen ${esc(scope)}: hoeveel crew beschikbaar is, hoeveel daarvan kiesbaar is voor de PL, hoe ver de indeling is en hoeveel screenings nog open staan. Deadline invullen: ${DEADLINE}.</p>
+    <div class="tools"><span class="muted">Toon:</span><select data-voortg="1"><option value="">mannen en vrouwen</option><option value="M" ${UI.voortG==='M'?'selected':''}>alleen mannen</option><option value="V" ${UI.voortG==='V'?'selected':''}>alleen vrouwen</option></select>${UI.voortG?`<span class="muted" style="font-size:12px">Alle aantallen tellen nu alleen ${UI.voortG==='M'?'mannen':'vrouwen'}. Het aantal plekken blijft het totaal van het weekend.</span>`:''}</div>
     <div class="stats">
       <div class="stat"><div class="v">${crewMet}</div><div class="l">crewleden beschikbaar gesteld</div></div>
       <div class="stat"><div class="v ${tot.open?'over':''}">${tot.open}</div><div class="l">crewleden wachten op screening</div></div>
@@ -1343,6 +1345,7 @@ document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.dataset.coordscr){try{await db.setCoordScreent(t.dataset.coordscr,t.checked);}catch(e){return;}const l=lbl(t.dataset.coordscr);if(l)l.coord_screent=t.checked;await refresh();toast(t.checked?'Coördinatoren van '+l.naam+' screenen mee':'Coördinatoren van '+l.naam+' screenen niet meer mee');return;}
   if(t.dataset.verdg){UI.verdG=t.value;await render();return;}
+  if(t.dataset.voortg){UI.voortG=t.value;await render();return;}
   if(t.dataset.verdrol){UI.verdRol=t.value;await render();return;}
   if(t.dataset.scr){(UI.scr=UI.scr||{})[t.dataset.scr]=t.value;await render();return;}
   if(t.id==='afAlleenZonder'){UI.afAlleenZonder=t.checked;document.getElementById('afLijstN').textContent=afContactRijen().length+' personen';return;}
