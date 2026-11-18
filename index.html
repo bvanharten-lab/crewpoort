@@ -1075,7 +1075,8 @@ function viewVerdeling(){
   const V=raw.map(v=>{const waar=(v.waar||[]).filter(x=>scope.includes(x.label));const res=(v.reserve||[]).filter(x=>scope.includes(x.label));const b=(v.beschikbaar||[]).filter(x=>scope.includes(x.label));
     if(R){const bR=b.filter(x=>isApproved(v.id,x.label,R));const wR=waar.filter(x=>x.rol===R);
       return {...v,waar:wR,reserve:res.filter(x=>x.rol===R),beschikbaar:bR,n:new Set(wR.map(x=>x.weekend)).size,totaal:new Set(waar.map(x=>x.weekend)).size,status:v.status||{}};}
-    return {...v,waar,reserve:res,beschikbaar:b,n:new Set(waar.map(x=>x.weekend)).size,totaal:new Set(waar.map(x=>x.weekend)).size,status:v.status||{}};}).filter(v=>v.beschikbaar.length||(R&&v.n));
+    return {...v,waar,reserve:res,beschikbaar:b,n:new Set(waar.map(x=>x.weekend)).size,totaal:new Set(waar.map(x=>x.weekend)).size,status:v.status||{}};}).filter(v=>v.beschikbaar.length||(R&&v.n)).filter(v=>!UI.verdG||user(v.id)?.geslacht===UI.verdG);
+  const G_TXT={M:'mannen',V:'vrouwen'};
   const gekozen=V.filter(v=>v.n>0).sort(opNaam);
   const over=gekozen.filter(v=>v.n>MAX_OK);
   const nul=V.filter(v=>v.n===0).sort(opNaam);
@@ -1094,6 +1095,7 @@ function viewVerdeling(){
   return `<div class="band"></div><section class="panel"><h2>Verdeling <span class="muted" style="font-size:14px;text-transform:none;letter-spacing:0">· ${esc(scopeTxt)}</span></h2><div class="body">
     <p class="muted">Hoe vaak is iedereen gekozen, over de weekenden van ${isKantoor()?'alle labels':'jouw label(s)'} heen. Vaker dan ${MAX_OK}x staat oranje. Klik op een cijfer om te filteren. Doel: niemand 10x, niemand 0x.</p>
     ${rolOpties.length>1||R?`<div class="tools"><span class="muted">Rol:</span>${rolOpties.length>1?`<select data-verdrol="1">${rolOpties.map(r=>`<option value="${r}" ${r===R?'selected':''}>${r?fmtRol(r):'alle rollen'}</option>`).join('')}</select>`:`<b>${esc(fmtRol(R))}</b>`}${R?`<span class="muted">Alleen wie voor ${esc(fmtRol(R))} is goedgekeurd en zich beschikbaar heeft gesteld. "Ingezet" telt alleen deze rol; "totaal" telt alle rollen bij elkaar.</span>`:''}</div>`:''}
+    <div class="tools"><span class="muted">Toon:</span><select data-verdg="1"><option value="">mannen en vrouwen</option><option value="M" ${UI.verdG==='M'?'selected':''}>alleen mannen</option><option value="V" ${UI.verdG==='V'?'selected':''}>alleen vrouwen</option></select>${UI.verdG?`<span class="muted">De cijfers hieronder tellen alleen ${G_TXT[UI.verdG]}.</span>`:''}</div>
     <div class="stats">${tile('alle',V.length,R?'beschikbaar als '+esc(fmtRol(R)):'beschikbaar gesteld')}${tile('gekozen',gekozen.length,'minstens 1x gekozen')}${tile('over',over.length,`vaker dan ${MAX_OK}x`,over.length?'over':'')}${tile('nul',nul.length,'nog 0x gekozen')}</div>
     ${R?`<div class="tw"><table><thead><tr><th>Naam</th><th class="right">Ingezet als ${esc(fmtRol(R))}</th><th>Waar</th><th class="right">Totaal</th><th>Beschikbaar voor</th></tr></thead><tbody>${lijst.map(rolRow).join('')||`<tr><td colspan="5" class="muted">${f==='alle'?'Nog niemand beschikbaar en goedgekeurd voor deze rol.':'Niemand in deze selectie.'}</td></tr>`}</tbody></table></div>`
     :f==='nul'?`<p class="muted" style="margin-top:12px">Wel beschikbaar, nog nergens ingedeeld. Tussen haakjes de gescreende rollen voor dat label. Geef per label een status: <b>Nog een plek geven</b> (zoek nog een plek), <b>Onder review</b> (eerst overleg) of <b>Ongeschikt</b> (dit jaar niet). De status is alleen zichtbaar voor kantoor, bewegingsleiders en projectleiders. Met <b>+ rol toevoegen</b> geef je iemand een rol die hij zelf niet heeft opgegeven (bewegingsleider: direct goedgekeurd; kantoor: als voorstel).</p>
@@ -1282,6 +1284,7 @@ document.addEventListener('submit',async e=>{
 document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.dataset.coordscr){try{await db.setCoordScreent(t.dataset.coordscr,t.checked);}catch(e){return;}const l=lbl(t.dataset.coordscr);if(l)l.coord_screent=t.checked;await refresh();toast(t.checked?'Coördinatoren van '+l.naam+' screenen mee':'Coördinatoren van '+l.naam+' screenen niet meer mee');return;}
+  if(t.dataset.verdg){UI.verdG=t.value;await render();return;}
   if(t.dataset.verdrol){UI.verdRol=t.value;await render();return;}
   if(t.dataset.scr){(UI.scr=UI.scr||{})[t.dataset.scr]=t.value;await render();return;}
   if(t.id==='afAlleenZonder'){UI.afAlleenZonder=t.checked;document.getElementById('afLijstN').textContent=afContactRijen().length+' personen';return;}
