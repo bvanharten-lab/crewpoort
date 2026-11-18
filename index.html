@@ -841,30 +841,10 @@ function beschikbaarLijst(w){
 const wkCrews=w=>(Array.isArray(w.crew_namen)&&w.crew_namen.filter(Boolean).length>1)?w.crew_namen.filter(Boolean).slice(0,2):null;
 const slotsVan=(w,k)=>k===2?(w.slots2||{}):(w.slots||{});
 const totaalPlekken=w=>Object.values(w.slots||{}).reduce((a,b)=>a+ +b,0)+(wkCrews(w)?Object.values(w.slots2||{}).reduce((a,b)=>a+ +b,0):0);
-/* Reserve: één lijst per route/crew (bij één crew: per weekend), niet per rol.
-   Opslag blijft de tabel reserve (weekend, rol, crew); de rol is de eerste goedgekeurde rol die de indeler mag indelen,
-   de kolom volgorde is het crewnummer (1 of 2). */
-const reserveCrewNr=(wid,c)=>(((D.reserveNr||{})[wid]||{})[c])||1;
-function reserveLijst(w,crewNr){const m=new Map();Object.entries((D.reserve||{})[w.id]||{}).forEach(([rol,a])=>a.forEach(c=>{if((wkCrews(w)?reserveCrewNr(w.id,c):1)!==crewNr)return;if(!m.has(c))m.set(c,[]);m.get(c).push(rol);}));
-  return [...m.entries()].map(([crew,rollen])=>({crew,rollen})).sort((a,b)=>(user(a.crew)?.naam||'').localeCompare(user(b.crew)?.naam||'','nl'));}
-function reserveBlok(w,editable,onlyRol,crewNr){
-  if(zonderRollen(w.label))return '';
-  const magR=M.rollen.filter(r=>(!onlyRol||r===onlyRol)&&editable&&magIndelen(w,r));
-  const lijst=reserveLijst(w,crewNr).filter(x=>!onlyRol||x.rollen.includes(onlyRol));
-  if(!magR.length&&!lijst.length)return '';
-  const used=new Set(Object.values(D.indeling[w.id]||{}).filter(Boolean));
-  const alRes=new Set(Object.values((D.reserve||{})[w.id]||{}).flat());
-  const kand=magR.length?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!used.has(c.id)&&!alRes.has(c.id)&&magR.some(r=>isApproved(c.id,w.label,r))):[];
-  const rt=c=>{const r=approvedRoles(c,w.label);return r.length?fmtRollen(r):'';};
-  return `<div class="slotrow reserverij" style="border-top:1px dashed var(--line,#d8d8d8);margin-top:8px;padding-top:8px"><div class="r">Reserve<div class="muted" style="font-size:11px">${wkCrews(w)?'voor deze route':'voor dit weekend'}</div></div><div class="cnt"><span class="muted">${lijst.length}</span></div><div class="picks" style="align-items:center">
-    ${lijst.map(x=>`<span class="tag">${esc(user(x.crew)?.naam||'?')}${rt(x.crew)?` <span class="muted">· ${esc(rt(x.crew))}</span>`:''}${x.rollen.some(r=>magR.includes(r))?` <button type="button" class="x" data-resdel="${w.id}|${x.crew}" title="Reserve verwijderen">×</button>`:''}</span>`).join('')}
-    ${magR.length?`<select data-resadd="${w.id}|${crewNr}"${onlyRol?` data-resrol="${esc(onlyRol)}"`:''} class="small"><option value="">+ reserve kiezen</option>${kand.map(c=>`<option value="${c.id}">${esc(c.naam)} · ${esc(rt(c.id))} · ${timesChosen(c.id)}x gekozen</option>`).join('')}</select>`:''}
-    ${!lijst.length&&!magR.length?'<span class="muted">geen</span>':''}</div></div>`;
-}
 function slotsBlok(w,editable,onlyRol,canEditSlots){
-  const cr=wkCrews(w);if(!cr)return slotsHtml(w,editable,onlyRol,canEditSlots,1)+reserveBlok(w,editable,onlyRol,1);
+  const cr=wkCrews(w);if(!cr)return slotsHtml(w,editable,onlyRol,canEditSlots,1);
   return cr.map((naam,i)=>{const sl=slotsVan(w,i+1);const n=Object.values(sl).reduce((a,b)=>a+ +b,0);const ind=D.indeling[w.id]||{};const gevuld=Object.entries(ind).filter(([k,v])=>v&&(+k.split('#')[1]>100)===(i===1)).length;
-    return `<div class="crewblok" style="margin-top:${i?22:6}px"><h3 style="margin:0 0 6px;padding-bottom:6px;border-bottom:2px solid var(--logo)">${esc(naam)} <span class="muted" style="font-size:13px;font-weight:400;text-transform:none;letter-spacing:0">· ${gevuld}/${n} gevuld</span></h3>${slotsHtml(w,editable,onlyRol,canEditSlots,i+1)||'<p class="muted">Nog geen plekken voor deze crew. '+(canEditSlots?'':'De projectleider of kantoor stelt het aantal per rol in.')+'</p>'}${reserveBlok(w,editable,onlyRol,i+1)}</div>`;}).join('')
+    return `<div class="crewblok" style="margin-top:${i?22:6}px"><h3 style="margin:0 0 6px;padding-bottom:6px;border-bottom:2px solid var(--logo)">${esc(naam)} <span class="muted" style="font-size:13px;font-weight:400;text-transform:none;letter-spacing:0">· ${gevuld}/${n} gevuld</span></h3>${slotsHtml(w,editable,onlyRol,canEditSlots,i+1)||'<p class="muted">Nog geen plekken voor deze crew. '+(canEditSlots?'':'De projectleider of kantoor stelt het aantal per rol in.')+'</p>'}</div>`;}).join('')
     +`<p class="muted" style="font-size:12px;margin-top:10px">De beschikbaarheid geldt voor het hele weekend. Wie al is ingedeeld, staat onderaan elke keuzelijst onder Dubbelrol en kan zo een tweede rol krijgen, ook in de andere crew.</p>`;
 }
 function slotsHtml(w,editable,onlyRol,canEditSlots,crewNr=1){
@@ -893,7 +873,10 @@ function slotsHtml(w,editable,onlyRol,canEditSlots,crewNr=1){
     const blocked=n?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&!isApproved(c.id,w.label,rol)&&wil(c.id,w.label).includes(rol)).map(c=>c.naam):[];
     const cnt=canEditSlots?`<select data-slotcount="${rol}" data-crewnr="${crewNr}" data-wk="${w.id}" title="Aantal nodig">${Array.from({length:Math.max(31,n+1)},(_,k)=>`<option value="${k}" ${k===n?'selected':''}>${k}</option>`).join('')}</select>`:`<span class="muted">${n}</span>`;
     const wie=editable&&!mag(rol)?`<div class="muted" style="font-size:11px">${PL_NIET.includes(rol)?'coördinator '+esc(fmtRol(rol))+' deelt in; jij kunt een voorkeur opgeven':'via PL'}</div>`:'';
-    return `<div class="slotrow"><div class="r">${esc(fmtRol(rol))}${wie}</div><div class="cnt">${cnt}</div><div class="picks">${Array.from({length:n},(_,i)=>sel(i+1)).join('')}${!n&&canEditSlots?'<span class="muted" style="font-size:12px;align-self:center">niet nodig</span>':''}${blocked.length?`<div class="muted" style="font-size:12px;flex-basis:100%">Beschikbaar, maar voor ${esc(fmtRol(rol))} nog te beoordelen door de bewegingsleider: ${blocked.map(esc).join(', ')}</div>`:''}</div></div>`;}).join('');
+    const res=reserveVan(w.id,rol);
+    const resKand=mag(rol)?crewUsers().filter(c=>wkPastBij(w,c)&&isAvail(c.id,w.id)&&isApproved(c.id,w.label,rol)&&!used.has(c.id)&&!res.includes(c.id)):[];
+    const reserve=(mag(rol)||res.length)?`<div class="reserve" style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px"><span class="muted">${wkCrews(w)?"Reserve (geldt voor beide crews):":"Reserve:"}</span>${res.map(c=>`<span class="tag">${esc(user(c)?.naam||c)}${mag(rol)?` <button type="button" class="x" data-resdel="${w.id}|${rol}|${c}" title="Reserve verwijderen">×</button>`:''}</span>`).join('')}${mag(rol)?`<select data-resadd="${w.id}|${rol}" class="small"><option value="">+ reserve kiezen</option>${resKand.map(c=>`<option value="${c.id}">${esc(c.naam)} · ${timesChosen(c.id)}x gekozen</option>`).join('')}</select>`:res.length?'':'<span class="muted">geen</span>'}</div>`:'';
+    return `<div class="slotrow"><div class="r">${esc(fmtRol(rol))}${wie}</div><div class="cnt">${cnt}</div><div class="picks">${Array.from({length:n},(_,i)=>sel(i+1)).join('')}${!n&&canEditSlots?'<span class="muted" style="font-size:12px;align-self:center">niet nodig</span>':''}${blocked.length?`<div class="muted" style="font-size:12px;flex-basis:100%">Beschikbaar, maar voor ${esc(fmtRol(rol))} nog te beoordelen door de bewegingsleider: ${blocked.map(esc).join(', ')}</div>`:''}${reserve}</div></div>`;}).join('');
 }
 
 /* Alleen kantoor: beschikbaarheid van een crewlid voor dit weekend aanzetten (of intrekken) als het bij het invullen misging. */
@@ -1278,9 +1261,7 @@ document.addEventListener('click',async e=>{
   if(b.dataset.rollen){const u=user(b.dataset.rollen);const cur=rollenVan(u).join(',');const inp=prompt('Rollen voor '+u.naam+' (komma-gescheiden: crew, leider, kantoor):',cur);if(inp===null)return;const rollen=inp.split(',').map(x=>x.trim().toLowerCase()).filter(x=>['crew','leider','kantoor'].includes(x));if(!rollen.length){toast('Geen geldige rol');return;}await db.setRollen(u.id,rollen);u.rollen=rollen;await refresh();toast('Rollen bijgewerkt');return;}
   if(b.dataset.deltw){await db.deleteToewijzing(b.dataset.deltw);await refresh();toast('Toewijzing verwijderd');return;}
   if(b.dataset.vkbesluit){const [wid,rol,plek,besluit]=b.dataset.vkbesluit.split('|');try{await db.voorkeurBesluit(wid,rol,+plek,besluit);}catch(e){return;}await refresh();toast(besluit==='goedgekeurd'?'Overgenomen in de indeling':'Voorkeur afgewezen');return;}
-  if(b.dataset.resdel){const [wid,crew]=b.dataset.resdel.split('|');const w=wk(wid);
-    for(const [rol,a] of Object.entries((D.reserve||{})[wid]||{}))if(a.includes(crew)&&magIndelen(w,rol)){try{await db.setReserve(wid,rol,crew,false);}catch(err){return;}}
-    await refresh();toast('Reserve verwijderd');return;}
+  if(b.dataset.resdel){const [wid,rol,crew]=b.dataset.resdel.split('|');await db.setReserve(wid,rol,crew,false);await refresh();toast('Reserve verwijderd');return;}
   if(b.dataset.bbadd||b.dataset.bbdel){const add=!!b.dataset.bbadd;const wid=b.dataset.bbadd||b.dataset.bbdel;const c=document.getElementById(add?'bbAdd':'bbDel').value;if(!c){toast('Kies eerst een crewlid');return;}
     if(!add&&!confirm(`Beschikbaarheid van ${user(c)?.naam} voor ${wk(wid)?.naam} intrekken?`))return;
     UI.bbOpen=true;try{await db.setAvail(c,wid,add);}catch(e){return;}await refresh();toast(add?`${user(c)?.naam} is beschikbaar voor ${wk(wid)?.naam}`:'Beschikbaarheid ingetrokken');return;}
@@ -1367,9 +1348,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='afAlleenZonder'){UI.afAlleenZonder=t.checked;document.getElementById('afLijstN').textContent=afContactRijen().length+' personen';return;}
   if(t.dataset.roladd){const [crew,label]=t.dataset.roladd.split('|');if(!t.value)return;const ok=await db.addVoorstel({crew,label,rol:t.value,door:me.id,status:!isKantoor()?'goedgekeurd':'voorgesteld'});toast(ok==='kiesbaar'?'Rol was al goedgekeurd (ervaring) en is nu ook kiesbaar':ok?(!isKantoor()?'Rol toegevoegd en goedgekeurd':'Rol voorgesteld, bewegingsleider beoordeelt'):'Bestaat al');await refresh();return;}
   if(t.dataset.cstatus){try{await db.setCrewStatus(t.dataset.cstatus,t.dataset.clabel,t.value||null);}catch(err){return;}await refresh();toast(t.value?'Status: '+STATUS_TXT[t.value]:'Status gewist');return;}
-  if(t.dataset.resadd){const [wid,nr]=t.dataset.resadd.split('|');if(!t.value)return;const w=wk(wid);
-    const rol=M.rollen.find(r=>(!t.dataset.resrol||r===t.dataset.resrol)&&magIndelen(w,r)&&isApproved(t.value,w.label,r));if(!rol)return;
-    try{await db.setReserve(wid,rol,t.value,true,+nr||1);}catch(err){return;}await refresh();toast('Reserve toegevoegd');return;}
+  if(t.dataset.resadd){const [wid,rol]=t.dataset.resadd.split('|');if(!t.value)return;try{await db.setReserve(wid,rol,t.value,true);}catch(err){return;}await refresh();toast('Reserve toegevoegd');return;}
   if(t.id==='who'){me=user(t.value);UI.step=null;await render();return;}
   if(t.id==='crewSel'){UI.crewView=t.value;render();return;}
   if(t.id==='wkSel'){UI.weekendView=t.value;render();return;}
