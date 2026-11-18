@@ -400,6 +400,10 @@ function LocalStore(){
     async deleteToewijzing(id){S.toewijzingen=S.toewijzingen.filter(t=>t.id!==id);save();},
     async addToewijzingPending(t){(S.twPending=S.twPending||[]).push(t);save();},
     async setNotitie(crew,tekst){S.notities=(S.notities||[]).filter(n=>n.crew!==crew);if(tekst)S.notities.push({crew,tekst,door:me.id});save();},
+    async kantoorVoegToe(crew,label,rol,weekend){const zr=!!DEMO.labels.find(l=>l.id===label)?.zonder_rollen;
+      if(!S.intake.some(i=>i.crew===crew&&i.label===label))S.intake.push({crew,label,ervaring:'nieuw',vervuld:[],voorkeur:zr?[]:[rol],toelichting:'Toegevoegd door kantoor'});
+      if(!zr){const g=S.goedkeuringen.find(y=>y.crew===crew&&y.label===label&&y.rol===rol);if(g){g.status='goedgekeurd';g.bron='kantoor';g.door=me.id;}else S.goedkeuringen.push({crew,label,rol,status:'goedgekeurd',bron:'kantoor',door:me.id,datum:today(),notitie:''});}
+      if(weekend){S.beschikbaar[crew]=S.beschikbaar[crew]||[];if(!S.beschikbaar[crew].includes(weekend))S.beschikbaar[crew].push(weekend);}save();return 'ok';},
     async setOpen(open){S.open=open;save();},
     async setVoorkeur(wid,rol,plek,crew){S.voorkeur=S.voorkeur||{};const r=(S.voorkeur[wid]=S.voorkeur[wid]||{});if(crew)r[`${rol}#${plek}`]={weekend:wid,rol,plek,crew,door:me.id,status:'voorgesteld',notitie:''};else delete r[`${rol}#${plek}`];save();},
     async voorkeurBesluit(wid,rol,plek,besluit){const v=((S.voorkeur||{})[wid]||{})[`${rol}#${plek}`];if(!v)return;v.status=besluit;if(besluit==='goedgekeurd'){S.indeling[wid]=S.indeling[wid]||{};S.indeling[wid][`${rol}#${plek}`]=v.crew;}save();},
@@ -475,6 +479,7 @@ function SupabaseStore(client){
     async deleteToewijzing(id){await one(client.from('toewijzingen').delete().eq('id',id));},
     async addToewijzingPending(t){await one(client.from('toewijzingen_pending').insert({...t,email:t.email.toLowerCase()}));try{await client.rpc('verwerk_toewijzingen_pending');}catch(e){}},
     async setNotitie(crew,tekst){if(tekst)await one(client.from('crew_notitie').upsert({crew,tekst,door:me.id,bijgewerkt:new Date().toISOString()},{onConflict:'crew'}));else await one(client.from('crew_notitie').delete().eq('crew',crew));},
+    async kantoorVoegToe(crew,label,rol,weekend){return await one(client.rpc('kantoor_voeg_toe',{p_crew:crew,p_label:label,p_rol:rol||null,p_weekend:weekend||null}));},
     async setOpen(open){await one(client.from('instellingen').upsert({sleutel:'open_registratie',waarde:open?'true':'false'},{onConflict:'sleutel'}));},
     async setVoorkeur(wid,rol,plek,crew){if(crew)await one(client.from('indeling_voorkeur').upsert({weekend:wid,rol,plek,crew,door:me.id,status:'voorgesteld',notitie:'',datum:today()},{onConflict:'weekend,rol,plek'}));else await one(client.from('indeling_voorkeur').delete().match({weekend:wid,rol,plek}));},
     async voorkeurBesluit(wid,rol,plek,besluit){await one(client.rpc('voorkeur_besluit',{p_weekend:wid,p_rol:rol,p_plek:plek,p_besluit:besluit,p_notitie:''}));},
@@ -1057,6 +1062,21 @@ function viewKlaar(){
     <div class="tools" style="margin-top:16px"><button class="primary" data-step="uitvraag">${dichtVoorMij()?'Mijn opgave bekijken':'Iets aanpassen'}</button></div>
   </div></section>`;
 }
+/* Alleen kantoor: iemand toevoegen aan een label/rol/weekend buiten de eigen aanmelding om. */
+function voegToePaneel(){
+  if(!isKantoor())return '';
+  const wks=[...D.weekends].sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||''));
+  return `<div class="band"></div><section class="panel"><h2>Iemand toevoegen</h2><div class="body">
+    <p class="muted">Voor wie zich niet (of niet hiervoor) heeft opgegeven. Je kiest een crewlid, een label of weekend en een rol. De app zet dan het label bij de inzet van die persoon, keurt de rol goed en maakt hem of haar, als je een weekend kiest, beschikbaar voor dat weekend. Daarna kies je de persoon bij Indeling. Dit werkt ook als de aanmelding gesloten is en als de persoon de stappen niet heeft afgerond; alleen man/vrouw moet bij het label passen.</p>
+    <form id="kvtForm" class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;align-items:end">
+      <label class="field"><span>Crewlid</span><select name="crew"><option value="">kies…</option>${crewUsers().map(c=>`<option value="${c.id}">${esc(c.naam||c.email||'(geen naam)')}${c.geslacht?' · '+c.geslacht:''}${medischBekend(c.id)?'':' · geen medisch/ICE'}</option>`).join('')}</select></label>
+      <label class="field"><span>Label of weekend</span><select name="doel"><option value="">kies…</option>${M.labels.map(l=>`<optgroup label="${esc(l.naam)}"><option value="L|${l.id}">Heel ${esc(l.naam)} (alleen label${zonderRollen(l.id)?'':' en rol'}, geen weekend)</option>${wks.filter(w=>w.label===l.id).map(w=>`<option value="W|${w.id}">${esc(w.naam)} (${esc(w.datum||'')})</option>`).join('')}</optgroup>`).join('')}</select></label>
+      <label class="field"><span>Rol</span><select name="rol"><option value="">kies…</option>${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select></label>
+      <button class="primary small" type="submit">Toevoegen</button>
+    </form>
+    <p class="muted" style="font-size:12px;margin-top:8px">"Geen medisch/ICE" achter een naam betekent dat de medische gegevens en het noodcontact nog ontbreken. Toevoegen kan dan wel, maar vraag die gegevens alsnog op voor het weekend.</p>
+  </div></section>`;
+}
 function viewVerdeling(){
   // Rol-weergave: coördinator van een rol ziet alleen zijn rol(len); wie breder toegang heeft kan per rol filteren.
   const breed=isKantoor()||isLeider()||coordLabels().length>0||myToew().some(t=>t.functie==='PL');
@@ -1101,7 +1121,7 @@ function viewVerdeling(){
     :f==='nul'?`<p class="muted" style="margin-top:12px">Wel beschikbaar, nog nergens ingedeeld. Tussen haakjes de gescreende rollen voor dat label. Geef per label een status: <b>Nog een plek geven</b> (zoek nog een plek), <b>Onder review</b> (eerst overleg) of <b>Ongeschikt</b> (dit jaar niet). De status is alleen zichtbaar voor kantoor, bewegingsleiders en projectleiders. Met <b>+ rol toevoegen</b> geef je iemand een rol die hij zelf niet heeft opgegeven (bewegingsleider: direct goedgekeurd; kantoor: als voorstel).</p>
     <div class="tw"><table><thead><tr><th>Naam</th><th>Beschikbaar voor</th><th>Status per label</th></tr></thead><tbody>${nul.map(nulRow).join('')||'<tr><td colspan="3" class="muted">Iedereen die beschikbaar is, is minstens één keer gekozen.</td></tr>'}</tbody></table></div>`
     :`<div class="tw"><table><thead><tr><th>Naam</th><th class="right">Gekozen</th><th>Waar</th><th class="right">Beschikbaar voor</th></tr></thead><tbody>${lijst.map(row).join('')||`<tr><td colspan="4" class="muted">${f==='over'?'Niemand is vaker dan '+MAX_OK+'x gekozen.':'Nog niemand ingedeeld.'}</td></tr>`}</tbody></table></div>`}
-  </div></section>`;
+  </div></section>${voegToePaneel()}`;
 }
 
 function viewModel(){
@@ -1276,6 +1296,12 @@ document.addEventListener('submit',async e=>{
   if(f.id==='twForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={user:fd.get('user'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
     await db.addToewijzing(t);await refresh();toast('Toegewezen');return;}
+  if(f.id==='kvtForm'){const fd=new FormData(f);const crew=fd.get('crew'),doel=fd.get('doel'),rol=fd.get('rol');clearErr();
+    if(!crew||!doel){showErr('Nog niet compleet',['Kies een crewlid en een label of weekend.']);return;}
+    const [soort,id]=doel.split('|');const label=soort==='W'?wk(id)?.label:id;const weekend=soort==='W'?id:null;
+    if(!zonderRollen(label)&&!rol){showErr('Nog niet compleet',['Kies een rol.']);return;}
+    try{await db.kantoorVoegToe(crew,label,zonderRollen(label)?null:rol,weekend);}catch(err){return;}
+    await refresh();toast(`${user(crew)?.naam||'Crewlid'} toegevoegd: ${lbl(label)?.naam}${zonderRollen(label)?'':' · '+fmtRol(rol)}${weekend?' · beschikbaar voor '+wk(weekend)?.naam:''}`,4000);return;}
   if(f.id==='twPendForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={email:fd.get('email'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
     if((D.twPending||[]).some(x=>['email','functie','soort','weekend','label','rol'].every(k=>(x[k]||null)===(t[k]||null)))){toast('Deze toewijzing staat er al');return;}
