@@ -900,9 +900,18 @@ function viewAanmeldingen(){
   if(!scope.length)return '<div class="band"></div><section class="panel"><h2>Aanmeldingen</h2><div class="body"><p class="muted">Je hebt geen toewijzing.</p></div></section>';
   // groepeer per weekend
   const byW={};scope.forEach(s=>{(byW[s.w.id]=byW[s.w.id]||{w:s.w,rollen:new Set(),alles:false,functies:new Set()});if(s.rol)byW[s.w.id].rollen.add(s.rol);else byW[s.w.id].alles=true;byW[s.w.id].functies.add(s.functie);});
-  const items=Object.values(byW).sort((a,b)=>(a.w.start_datum||'').localeCompare(b.w.start_datum||''));
+  const alle=Object.values(byW).sort((a,b)=>(a.w.start_datum||'').localeCompare(b.w.start_datum||''));
+  // Labelfilter (bij weekenden uit meerdere labels) en per weekend de stand: gevuld/nodig voor jouw rol(len) of het hele weekend
+  const amLabels=M.labels.map(l=>l.id).filter(l=>alle.some(x=>x.w.label===l));
+  if(UI.amLabel&&!amLabels.includes(UI.amLabel))UI.amLabel='';
+  if(UI.amOpen&&amLabels.length<1)UI.amOpen=false;
+  const stand=x=>{if(zonderRollen(x.w.label))return null;const rs=x.alles?null:[...x.rollen];const tel=sl=>Object.entries(sl||{}).filter(([r])=>!rs||rs.includes(r)).reduce((a,[,n])=>a+ +n,0);
+    const nodig=tel(x.w.slots)+(wkCrews(x.w)?tel(x.w.slots2):0);const gevuld=Object.entries(D.indeling[x.w.id]||{}).filter(([k,v])=>v&&(!rs||rs.includes(k.split('#')[0]))).length;return {nodig,gevuld};};
+  let items=alle.filter(x=>!UI.amLabel||x.w.label===UI.amLabel);
+  if(UI.amOpen){const o=items.filter(x=>{const st=stand(x);return st&&st.gevuld<st.nodig;});if(o.length)items=o;else UI.amOpen=false;}
   const cur=items.find(x=>x.w.id===UI.aanmeldView)||items[0];UI.aanmeldView=cur.w.id;
-  const kies=items.length>1?`<div class="tools" style="margin-top:16px"><label for="amSel" class="muted">Jouw weekend:</label><select id="amSel">${items.map(x=>`<option value="${x.w.id}" ${x.w.id===cur.w.id?'selected':''}>${esc(lbl(x.w.label).naam)} · ${esc(x.w.naam)} (${esc(x.w.datum)}) · ${esc(fmtRollen([...x.functies]))}</option>`).join('')}</select></div>`:'';
+  const optTxt=x=>{const st=stand(x);return `${esc(lbl(x.w.label).naam)} · ${esc(x.w.naam)} (${esc(x.w.datum)}) · ${esc(fmtRollen([...x.functies]))}${st?` · ${st.gevuld}/${st.nodig}`:''}`;};
+  const kies=alle.length>1?`<div class="tools" style="margin-top:16px">${amLabels.length>1?`<label for="amLabel" class="muted">Label:</label><select id="amLabel"><option value="">alle labels (${alle.length})</option>${amLabels.map(l=>`<option value="${l}" ${UI.amLabel===l?'selected':''}>${esc(lbl(l).naam)} (${alle.filter(x=>x.w.label===l).length})</option>`).join('')}</select>`:''}<label for="amSel" class="muted">Jouw weekend:</label><select id="amSel">${items.map(x=>`<option value="${x.w.id}" ${x.w.id===cur.w.id?'selected':''}>${optTxt(x)}</option>`).join('')}</select><label class="muted"><input type="checkbox" id="amOpen" ${UI.amOpen?'checked':''}> alleen weekenden met open plekken</label><span class="muted">${items.length} van ${alle.length}</span></div>`:'';
   return kies+[cur].map(({w,rollen,alles,functies})=>{
     const rolFilter=alles?null:[...rollen];
     const canEdit=M.rollen.some(r=>magIndelen(w,r));const isPL=magSlots(w);const mijnRollen=M.rollen.filter(r=>magIndelen(w,r));
@@ -1283,6 +1292,8 @@ document.addEventListener('change',async e=>{
   if(t.id==='crewSel'){UI.crewView=t.value;render();return;}
   if(t.id==='wkSel'){UI.weekendView=t.value;render();return;}
   if(t.id==='amSel'){UI.aanmeldView=t.value;render();return;}
+  if(t.id==='amLabel'){UI.amLabel=t.value;render();return;}
+  if(t.id==='amOpen'){UI.amOpen=t.checked;render();if(t.checked&&!UI.amOpen)toast('Geen weekenden met open plekken in deze selectie');return;}
   if(t.id==='wkLabelSel'){UI.wkLabel=t.value;render();return;}
   if(t.dataset.leider){clearErr();try{await db.setLeider(t.dataset.leider,t.dataset.veld,t.value);}catch(err){return;}M=await db.init();me=M.users.find(u=>u.id===me.id)||me;await refresh();toast('Bewegingsleider opgeslagen');return;}
   if(t.id==='ervSel'){const nieuw=t.value==='nieuw';const tab=document.querySelector('.roltab');tab.classList.toggle('nieuw',nieuw);if(nieuw)tab.querySelectorAll('input[data-f=vervuld]').forEach(x=>x.checked=false);document.getElementById('rolHelp').textContent=nieuw?'Je bent nog niet mee geweest, dus geef alleen aan wat je in 2027 graag zou doen.':'Links: wat je al gedaan hebt. Rechts: wat je in 2027 graag zou doen.';return;}
