@@ -400,6 +400,8 @@ function LocalStore(){
     async deleteToewijzing(id){S.toewijzingen=S.toewijzingen.filter(t=>t.id!==id);save();},
     async addToewijzingPending(t){(S.twPending=S.twPending||[]).push(t);save();},
     async setNotitie(crew,tekst){S.notities=(S.notities||[]).filter(n=>n.crew!==crew);if(tekst)S.notities.push({crew,tekst,door:me.id});save();},
+    async kantoorMaakPersoon(p){const id='u_blanco_'+Date.now();DEMO.users.push({id,naam:p.naam,email:p.email||('blanco-'+id+'@geen-email.invalid'),telefoon:p.telefoon||'',rol:'crew',rollen:['crew'],geslacht:p.geslacht});return id;},
+    async kantoorZetEmail(crew,email){const u=DEMO.users.find(x=>x.id===crew);if(u)u.email=email;},
     async kantoorVoegToe(crew,label,rol,weekend){const zr=!!DEMO.labels.find(l=>l.id===label)?.zonder_rollen;
       if(!S.intake.some(i=>i.crew===crew&&i.label===label))S.intake.push({crew,label,ervaring:'nieuw',vervuld:[],voorkeur:zr?[]:[rol],toelichting:'Toegevoegd door kantoor'});
       if(!zr){const g=S.goedkeuringen.find(y=>y.crew===crew&&y.label===label&&y.rol===rol);if(g){g.status='goedgekeurd';g.bron='kantoor';g.door=me.id;}else S.goedkeuringen.push({crew,label,rol,status:'goedgekeurd',bron:'kantoor',door:me.id,datum:today(),notitie:''});}
@@ -479,6 +481,8 @@ function SupabaseStore(client){
     async deleteToewijzing(id){await one(client.from('toewijzingen').delete().eq('id',id));},
     async addToewijzingPending(t){await one(client.from('toewijzingen_pending').insert({...t,email:t.email.toLowerCase()}));try{await client.rpc('verwerk_toewijzingen_pending');}catch(e){}},
     async setNotitie(crew,tekst){if(tekst)await one(client.from('crew_notitie').upsert({crew,tekst,door:me.id,bijgewerkt:new Date().toISOString()},{onConflict:'crew'}));else await one(client.from('crew_notitie').delete().eq('crew',crew));},
+    async kantoorMaakPersoon(p){return await one(client.rpc('kantoor_maak_persoon',{p_naam:p.naam,p_geslacht:p.geslacht,p_email:p.email||null,p_telefoon:p.telefoon||null}));},
+    async kantoorZetEmail(crew,email){await one(client.rpc('kantoor_zet_email',{p_crew:crew,p_email:email}));},
     async kantoorVoegToe(crew,label,rol,weekend){return await one(client.rpc('kantoor_voeg_toe',{p_crew:crew,p_label:label,p_rol:rol||null,p_weekend:weekend||null}));},
     async setOpen(open){await one(client.from('instellingen').upsert({sleutel:'open_registratie',waarde:open?'true':'false'},{onConflict:'sleutel'}));},
     async setVoorkeur(wid,rol,plek,crew){if(crew)await one(client.from('indeling_voorkeur').upsert({weekend:wid,rol,plek,crew,door:me.id,status:'voorgesteld',notitie:'',datum:today()},{onConflict:'weekend,rol,plek'}));else await one(client.from('indeling_voorkeur').delete().match({weekend:wid,rol,plek}));},
@@ -1063,17 +1067,31 @@ function viewKlaar(){
   </div></section>`;
 }
 /* Alleen kantoor: iemand toevoegen aan een label/rol/weekend buiten de eigen aanmelding om. */
+const isBlanco=u=>/@geen-email\.invalid$/i.test(u?.email||'');
+function blancoLijst(){
+  const bl=crewUsers().filter(isBlanco);if(!bl.length)return '';
+  return `<h3 style="margin-top:16px">Blanco personen zonder e-mailadres (${bl.length})</h3>
+    <p class="muted">Deze personen kunnen zelf nog niet inloggen. Vul het e-mailadres in zodra je het hebt; daarna kunnen ze inloggen en hun eigen gegevens en medische gegevens aanvullen.</p>
+    ${bl.map(u=>`<form class="blEmailForm row" data-crew="${u.id}" style="display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap"><b style="min-width:180px">${esc(u.naam)}</b><input name="email" type="email" required placeholder="e-mailadres" style="flex:1;min-width:200px"><button class="small" type="submit">E-mail opslaan</button></form>`).join('')}`;
+}
 function voegToePaneel(){
   if(!isKantoor())return '';
   const wks=[...D.weekends].sort((a,b)=>(a.start_datum||'').localeCompare(b.start_datum||''));
   return `<div class="band"></div><section class="panel"><h2>Iemand toevoegen</h2><div class="body">
     <p class="muted">Voor wie zich niet (of niet hiervoor) heeft opgegeven. Je kiest een crewlid, een label of weekend en een rol. De app zet dan het label bij de inzet van die persoon, keurt de rol goed en maakt hem of haar, als je een weekend kiest, beschikbaar voor dat weekend. Daarna kies je de persoon bij Indeling. Dit werkt ook als de aanmelding gesloten is en als de persoon de stappen niet heeft afgerond; alleen man/vrouw moet bij het label passen.</p>
     <form id="kvtForm" class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;align-items:end">
-      <label class="field"><span>Crewlid</span><select name="crew"><option value="">kies…</option>${crewUsers().map(c=>`<option value="${c.id}">${esc(c.naam||c.email||'(geen naam)')}${c.geslacht?' · '+c.geslacht:''}${medischBekend(c.id)?'':' · geen medisch/ICE'}</option>`).join('')}</select></label>
+      <label class="field"><span>Crewlid</span><select name="crew"><option value="">kies… (of vul hieronder een nieuw persoon in)</option>${crewUsers().map(c=>`<option value="${c.id}">${esc(c.naam||c.email||'(geen naam)')}${c.geslacht?' · '+c.geslacht:''}${medischBekend(c.id)?'':' · geen medisch/ICE'}</option>`).join('')}</select></label>
       <label class="field"><span>Label of weekend</span><select name="doel"><option value="">kies…</option>${M.labels.map(l=>`<optgroup label="${esc(l.naam)}"><option value="L|${l.id}">Heel ${esc(l.naam)} (alleen label${zonderRollen(l.id)?'':' en rol'}, geen weekend)</option>${wks.filter(w=>w.label===l.id).map(w=>`<option value="W|${w.id}">${esc(w.naam)} (${esc(w.datum||'')})</option>`).join('')}</optgroup>`).join('')}</select></label>
       <label class="field"><span>Rol</span><select name="rol"><option value="">kies…</option>${M.rollen.map(r=>`<option value="${r}">${fmtRol(r)}</option>`).join('')}</select></label>
       <button class="primary small" type="submit">Toevoegen</button>
-    </form>
+      <div style="grid-column:1/-1;border-top:1px dashed var(--line,#d8d8d8);padding-top:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;align-items:end">
+        <div style="grid-column:1/-1" class="muted"><b>Staat de persoon er nog niet in?</b> Laat "Crewlid" leeg en vul hier de naam in. De app maakt dan een blanco persoon aan en voegt die meteen toe. Er gaat geen mail uit.</div>
+        <label class="field"><span>Naam nieuw persoon</span><input name="nnaam" autocomplete="off" placeholder="Voor- en achternaam"></label>
+        <label class="field"><span>Man/vrouw</span><select name="ngeslacht"><option value="">kies…</option><option value="M">Man</option><option value="V">Vrouw</option></select></label>
+        <label class="field"><span>E-mail (optioneel)</span><input name="nemail" type="email" autocomplete="off" placeholder="mag leeg blijven"></label>
+        <label class="field"><span>Telefoon (optioneel)</span><input name="ntelefoon" autocomplete="off"></label>
+      </div>
+    </form>${blancoLijst()}
     <p class="muted" style="font-size:12px;margin-top:8px">"Geen medisch/ICE" achter een naam betekent dat de medische gegevens en het noodcontact nog ontbreken. Toevoegen kan dan wel, maar vraag die gegevens alsnog op voor het weekend.</p>
   </div></section>`;
 }
@@ -1296,12 +1314,26 @@ document.addEventListener('submit',async e=>{
   if(f.id==='twForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={user:fd.get('user'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
     await db.addToewijzing(t);await refresh();toast('Toegewezen');return;}
-  if(f.id==='kvtForm'){const fd=new FormData(f);const crew=fd.get('crew'),doel=fd.get('doel'),rol=fd.get('rol');clearErr();
-    if(!crew||!doel){showErr('Nog niet compleet',['Kies een crewlid en een label of weekend.']);return;}
+  if(f.classList.contains('blEmailForm')){clearErr();try{await db.kantoorZetEmail(f.dataset.crew,String(new FormData(f).get('email')||'').trim());}catch(err){return;}
+    await refresh();toast('E-mailadres opgeslagen. Deze persoon kan nu zelf inloggen.',4000);return;}
+  if(f.id==='kvtForm'){const fd=new FormData(f);let crew=fd.get('crew');const doel=fd.get('doel'),rol=fd.get('rol');clearErr();
+    const nn=String(fd.get('nnaam')||'').trim(),ng=fd.get('ngeslacht'),ne=String(fd.get('nemail')||'').trim().toLowerCase();
+    if(crew&&nn){showErr('Kies één van de twee',['Je hebt een crewlid gekozen én een nieuwe naam ingevuld. Maak één van de twee leeg.']);return;}
+    if(!crew&&!nn){showErr('Nog niet compleet',['Kies een crewlid, of vul de naam van een nieuw persoon in.']);return;}
+    if(!doel){showErr('Nog niet compleet',['Kies een label of weekend.']);return;}
     const [soort,id]=doel.split('|');const label=soort==='W'?wk(id)?.label:id;const weekend=soort==='W'?id:null;
     if(!zonderRollen(label)&&!rol){showErr('Nog niet compleet',['Kies een rol.']);return;}
+    if(nn){
+      if(!ng){showErr('Nog niet compleet',['Kies man of vrouw voor de nieuwe persoon.']);return;}
+      const voor=[...(lbl(label)?.voor||['M','V']),...(lbl(label)?.gast||[])];if(!voor.includes(ng)){showErr('Past niet',[`${lbl(label)?.naam} is niet beschikbaar voor ${ng==='M'?'mannen':'vrouwen'}.`]);return;}
+      if(ne&&M.users.some(u=>(u.email||'').toLowerCase()===ne)){showErr('Bestaat al',['Er bestaat al iemand met dit e-mailadres. Kies die persoon in de lijst met crewleden.']);return;}
+      const dub=M.users.filter(u=>(u.naam||'').trim().toLowerCase()===nn.toLowerCase());
+      if(dub.length&&f.dataset.dubOk!==nn){f.dataset.dubOk=nn;showErr('Deze naam bestaat al',[`Er staat al iemand met de naam ${nn} in de lijst. Is dit dezelfde persoon, kies die dan bij Crewlid. Is het iemand anders, klik dan nog een keer op Toevoegen.`]);return;}
+      try{crew=await db.kantoorMaakPersoon({naam:nn,geslacht:ng,email:ne,telefoon:String(fd.get('ntelefoon')||'').trim()});}catch(err){return;}
+      if(!crew){showErr('Niet gelukt',['De persoon kon niet worden aangemaakt.']);return;}
+    }
     try{await db.kantoorVoegToe(crew,label,zonderRollen(label)?null:rol,weekend);}catch(err){return;}
-    await refresh();toast(`${user(crew)?.naam||'Crewlid'} toegevoegd: ${lbl(label)?.naam}${zonderRollen(label)?'':' · '+fmtRol(rol)}${weekend?' · beschikbaar voor '+wk(weekend)?.naam:''}`,4000);return;}
+    await refresh();toast(`${user(crew)?.naam||'Crewlid'} ${nn?'aangemaakt en ':''}toegevoegd: ${lbl(label)?.naam}${zonderRollen(label)?'':' · '+fmtRol(rol)}${weekend?' · beschikbaar voor '+wk(weekend)?.naam:''}`,4000);return;}
   if(f.id==='twPendForm'){const fd=new FormData(f);const soort=fd.get('soort');
     const t={email:fd.get('email'),functie:fd.get('functie'),soort,weekend:soort==='weekend'?fd.get('weekend'):null,label:soort==='weekend'?null:(fd.get('label')||null),rol:soort==='rol'?fd.get('rol'):null};
     if((D.twPending||[]).some(x=>['email','functie','soort','weekend','label','rol'].every(k=>(x[k]||null)===(t[k]||null)))){toast('Deze toewijzing staat er al');return;}
