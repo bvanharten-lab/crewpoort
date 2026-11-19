@@ -399,7 +399,8 @@ function LocalStore(){
     async setCoordScreent(label,aan){DEMO.labels.find(x=>x.id===label).coord_screent=!!aan;},
     async deleteToewijzing(id){S.toewijzingen=S.toewijzingen.filter(t=>t.id!==id);save();},
     async addToewijzingPending(t){(S.twPending=S.twPending||[]).push(t);save();},
-    async setNotitie(crew,tekst){S.notities=(S.notities||[]).filter(n=>n.crew!==crew);if(tekst)S.notities.push({crew,tekst,door:me.id});save();},
+    async setNotitie(crew,tekst){S.notities=(S.notities||[]).filter(n=>!(n.crew===crew&&n.door===me.id));if(tekst)S.notities.push({crew,tekst,door:me.id});save();},
+    async delNotitie(crew,door){S.notities=(S.notities||[]).filter(n=>!(n.crew===crew&&n.door===door));save();},
     async kantoorMaakPersoon(p){const id='u_blanco_'+Date.now();DEMO.users.push({id,naam:p.naam,email:p.email||('blanco-'+id+'@geen-email.invalid'),telefoon:p.telefoon||'',rol:'crew',rollen:['crew'],geslacht:p.geslacht});return id;},
     async kantoorZetEmail(crew,email){const u=DEMO.users.find(x=>x.id===crew);if(u)u.email=email;},
     async kantoorVoegToe(crew,label,rol,weekend){const zr=!!DEMO.labels.find(l=>l.id===label)?.zonder_rollen;
@@ -481,7 +482,8 @@ function SupabaseStore(client){
     async setRollen(id,rollen){await one(client.rpc('zet_rollen',{p_user:id,p_rollen:rollen}));},
     async deleteToewijzing(id){await one(client.from('toewijzingen').delete().eq('id',id));},
     async addToewijzingPending(t){await one(client.from('toewijzingen_pending').insert({...t,email:t.email.toLowerCase()}));try{await client.rpc('verwerk_toewijzingen_pending');}catch(e){}},
-    async setNotitie(crew,tekst){if(tekst)await one(client.from('crew_notitie').upsert({crew,tekst,door:me.id,bijgewerkt:new Date().toISOString()},{onConflict:'crew'}));else await one(client.from('crew_notitie').delete().eq('crew',crew));},
+    async setNotitie(crew,tekst){if(tekst)await one(client.from('crew_notitie').upsert({crew,tekst,door:me.id,bijgewerkt:new Date().toISOString()},{onConflict:'crew,door'}));else await one(client.from('crew_notitie').delete().match({crew,door:me.id}));},
+    async delNotitie(crew,door){await one(client.from('crew_notitie').delete().match({crew,door}));},
     async kantoorMaakPersoon(p){return await one(client.rpc('kantoor_maak_persoon',{p_naam:p.naam,p_geslacht:p.geslacht,p_email:p.email||null,p_telefoon:p.telefoon||null}));},
     async kantoorZetEmail(crew,email){await one(client.rpc('kantoor_zet_email',{p_crew:crew,p_email:email}));},
     async kantoorVoegToe(crew,label,rol,weekend){return await one(client.rpc('kantoor_voeg_toe',{p_crew:crew,p_label:label,p_rol:rol||null,p_weekend:weekend||null}));},
@@ -1199,8 +1201,14 @@ function dichtBanner(){
   return `<section class="panel" style="margin-bottom:14px"><div class="body"><b>De aanmelding voor 2027 is gesloten.</b> Je kunt je inzet en beschikbaarheid nog bekijken, maar niet meer wijzigen. Klopt er iets niet of wil je alsnog iets doorgeven? Mail naar contact@4m.nl. Je contact- en medische gegevens kun je wel blijven bijwerken.</div></section>`;
 }
 /* Interne opmerking van kantoor per crewlid; kantoor bewerkt, leiders/PL/coördinatoren lezen. */
-const notitieVan=c=>(D.notities||[]).find(n=>n.crew===c)?.tekst||'';
-const notitieHtml=c=>{const t=notitieVan(c);return (t?`<div class="kn" style="font-size:12px;margin-top:4px"><b>Kantoor:</b> ${esc(t)}</div>`:'')+(isKantoor()?`<div style="margin-top:4px"><button type="button" class="small" data-notitie="${c}">${t?'Opmerking wijzigen':'+ opmerking kantoor'}</button></div>`:'');};
+/* Interne opmerkingen per crewlid: één per schrijver. Schrijven: kantoor, bewegingsleiders, coördinatoren. Het crewlid ziet ze niet. */
+const magNotitie=()=>isKantoor()||isLeider()||myToew().some(isCoordF);
+const notitiesVan=c=>(D.notities||[]).filter(n=>n.crew===c&&n.tekst).sort((a,b)=>(user(a.door)?.naam||'').localeCompare(user(b.door)?.naam||'','nl'));
+const notitieVan=c=>(D.notities||[]).find(n=>n.crew===c&&n.door===me.id)?.tekst||'';
+const notitieWie=n=>{const u=user(n.door);return u?(rollenVan(u).includes('kantoor')?'Kantoor · '+u.naam:u.naam):'Kantoor';};
+const notitieHtml=c=>{const ns=notitiesVan(c);const eigen=notitieVan(c);
+  return ns.map(n=>`<div class="kn" style="font-size:12px;margin-top:4px"><b>${esc(notitieWie(n))}:</b> ${esc(n.tekst)}${isKantoor()&&n.door!==me.id?` <button type="button" class="x" data-notitiedel="${c}|${n.door}" title="Opmerking verwijderen">×</button>`:''}</div>`).join('')
+    +(magNotitie()&&c!==me.id?`<div style="margin-top:4px"><button type="button" class="small" data-notitie="${c}">${eigen?'Mijn opmerking wijzigen':'+ opmerking'}</button></div>`:'');};
 function toewBanner(){
   if(!isCrew()||isKantoor()||!myToew().length||UI.step==='aanmeldingen')return '';
   const items=myToew().map(t=>t.soort==='weekend'?`<b>${esc(fmtRol(t.functie))}</b> van ${esc(wk(t.weekend)?.naam||t.weekend)}`:t.soort==='label'?`<b>${esc(fmtRol(t.functie))}</b> voor heel ${esc(lbl(t.label)?.naam||t.label)}`:`<b>${esc(fmtRol(t.functie))}</b> ${esc(fmtRol(t.rol))}${t.label?' bij '+esc(lbl(t.label)?.naam):''}`);
@@ -1278,7 +1286,8 @@ document.addEventListener('click',async e=>{
   if(b.dataset.bbadd||b.dataset.bbdel){const add=!!b.dataset.bbadd;const wid=b.dataset.bbadd||b.dataset.bbdel;const c=document.getElementById(add?'bbAdd':'bbDel').value;if(!c){toast('Kies eerst een crewlid');return;}
     if(!add&&!confirm(`Beschikbaarheid van ${user(c)?.naam} voor ${wk(wid)?.naam} intrekken?`))return;
     UI.bbOpen=true;try{await db.setAvail(c,wid,add);}catch(e){return;}await refresh();toast(add?`${user(c)?.naam} is beschikbaar voor ${wk(wid)?.naam}`:'Beschikbaarheid ingetrokken');return;}
-  if(b.dataset.notitie){const c=b.dataset.notitie;const t=prompt(`Interne opmerking van kantoor bij ${user(c)?.naam||''}.\nZichtbaar voor kantoor, bewegingsleiders, projectleiders en coördinatoren; niet voor het crewlid zelf. Geen medische gegevens. Leeg laten = opmerking verwijderen.`,notitieVan(c));
+  if(b.dataset.notitiedel){const [c,door]=b.dataset.notitiedel.split('|');try{await db.delNotitie(c,door);}catch(e){return;}await refresh();toast('Opmerking verwijderd');return;}
+  if(b.dataset.notitie){const c=b.dataset.notitie;const t=prompt(`Jouw interne opmerking bij ${user(c)?.naam||''}.\nZichtbaar voor kantoor, bewegingsleiders, projectleiders en coördinatoren; niet voor het crewlid zelf. Geen medische gegevens. Leeg laten = jouw opmerking verwijderen.`,notitieVan(c));
     if(t===null)return;try{await db.setNotitie(c,t.trim());}catch(e){return;}await refresh();toast(t.trim()?'Opmerking opgeslagen':'Opmerking verwijderd');return;}
   if(b.dataset.setopen){const open=b.dataset.setopen==='1';if(!confirm(open?'Aanmelding weer openen? Crew kan dan opnieuw inzet en beschikbaarheid wijzigen en nieuwe mensen kunnen zich registreren.':'Aanmelding sluiten? Crew kan daarna niets meer wijzigen aan inzet en beschikbaarheid. De achterkant blijft open voor kantoor, bewegingsleiders, projectleiders en coördinatoren.'))return;
     try{await db.setOpen(open);}catch(e){return;}await refresh();toast(open?'Aanmelding is weer open':'Aanmelding is gesloten');return;}
